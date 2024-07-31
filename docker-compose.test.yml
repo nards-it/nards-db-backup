@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: testuser
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./tests/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql
+
+  postgis:
+    image: postgis/postgis:13-3.1
+    environment:
+      POSTGRES_DB: testuser
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./tests/init_postgis.sql:/docker-entrypoint-initdb.d/init_postgis.sql
+
+  nards_backup_mysql:
+    build: .
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: testuser
+      DB_PASSWORD: testpassword
+      DB_TYPE: mysql
+      BACKUP_DIR: /backups
+      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 7, "name": "mysql_backup"}]'
+      RESTORE_CONFIG_NAME: 'mysql_backup'
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      - mysql
+
+  nards_backup_postgis:
+    build: .
+    environment:
+      DB_HOST: postgis
+      DB_PORT: 5432
+      DB_USER: testuser
+      DB_PASSWORD: testpassword
+      DB_TYPE: postgis
+      BACKUP_DIR: /backups
+      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
+      RESTORE_CONFIG_NAME: 'every'
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      - postgis

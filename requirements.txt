@@ -1,0 +1,6 @@
+Flask
+psycopg2-binary
+mysql-connector-python
+APScheduler
+click
+pytest
