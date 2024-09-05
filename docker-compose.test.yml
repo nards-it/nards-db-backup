@@ -55,6 +55,8 @@ services:
       RESTORE_CONFIG_NAME: 'every'
     ports:
       - "5002:5000"
+    expose:
+      - 5000
     volumes:
       - ./backups:/backups
     depends_on:

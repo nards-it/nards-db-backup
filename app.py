@@ -40,7 +40,10 @@ scheduler = Scheduler(
 @app.route('/health', methods=['GET'])
 def health():
     """Endpoint to get the current health state of the last backup operation."""
-    return jsonify({"health": scheduler.get_health()}), 200
+    if scheduler.get_health():
+        return jsonify({"health": "healthy"}), 200
+    else:
+        return jsonify({"health": "failed"}), 500
 
 
 @app.cli.command("restore")
