@@ -26,7 +26,8 @@ db_module = DatabaseModule(
     host=Config.DB_HOST,
     port=Config.DB_PORT,
     username=Config.DB_USER,
-    password=Config.DB_PASSWORD
+    password=Config.DB_PASSWORD,
+    maintenance_db=Config.DB_MAINTENANCE_NAME
 )
 
 # Initialize the scheduler with multiple cron configurations
