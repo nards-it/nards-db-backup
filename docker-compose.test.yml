@@ -14,7 +14,7 @@ services:
       - ./tests/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql
 
   postgis:
-    image: postgis/postgis:13-3.1
+    image: postgis/postgis:14-3.5
     environment:
       POSTGRES_DB: testuser
       POSTGRES_USER: testuser

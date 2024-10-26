@@ -1,6 +1,7 @@
-Flask
-psycopg2-binary
-mysql-connector-python
-APScheduler
-click
-pytest
+Flask==3.0.3
+psycopg2-binary==2.9.10
+mysql-connector-python==9.1.0
+APScheduler==3.10.4
+click==8.1.7
+pytest==8.3.3
+pytest-docker==3.1.1

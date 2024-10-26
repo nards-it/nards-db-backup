@@ -20,7 +20,7 @@ class MySQLModule(AbstractModule):
     for listing, backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str):
+    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
         """
         Initializes the MySQLModule with connection details.
 
@@ -30,7 +30,7 @@ class MySQLModule(AbstractModule):
             username (str): The username to connect to the MySQL server.
             password (str): The password to connect to the MySQL server.
         """
-        super().__init__(host, port, username, password)
+        super().__init__(host, port, username, password, maintenance_db)
 
     def _connect(self):
         """
@@ -46,7 +46,8 @@ class MySQLModule(AbstractModule):
                     host=self._host,
                     port=self._port,
                     user=self._username,
-                    password=self._password
+                    password=self._password,
+                    database=self._maintenance_db
                 )
                 logger.info("Successfully connected to MySQL database.")
                 return connection

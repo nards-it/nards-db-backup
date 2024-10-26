@@ -18,7 +18,7 @@ class PostgresModule(AbstractModule):
     providing methods for listing, backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str):
+    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
         """
         Initializes the PostgresModule with connection details.
 
@@ -28,7 +28,7 @@ class PostgresModule(AbstractModule):
             username (str): The username to connect to the PostgreSQL server.
             password (str): The password to connect to the PostgreSQL server.
         """
-        super().__init__(host, port, username, password)
+        super().__init__(host, port, username, password, maintenance_db)
 
     def _connect(self):
         """
@@ -42,7 +42,8 @@ class PostgresModule(AbstractModule):
                 host=self._host,
                 port=self._port,
                 user=self._username,
-                password=self._password
+                password=self._password,
+                dbname=self._maintenance_db
             )
             logger.info("Successfully connected to PostgreSQL database.")
             return connection

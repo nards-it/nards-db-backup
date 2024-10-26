@@ -12,6 +12,6 @@ services:
       DB_TYPE: 'postgres' # postgres/postgis/mysql
       BACKUP_DIR: /backups
       CRON_CONFIGS: '[{"cron": "0 * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
-      RESTORE_CONFIG_NAME: 'hourly'
+      # RESTORE_CONFIG_NAME: 'hourly'
     volumes:
       - ./backups:/backups

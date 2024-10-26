@@ -16,6 +16,7 @@ class Config:
     DB_PORT = os.getenv('DB_PORT', port_default)
     DB_USER = os.getenv('DB_USER', 'user')
     DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
+    DB_MAINTENANCE_NAME = os.getenv('DB_MAINTENANCE_NAME', DB_USER)
 
     # Backup configurations
     CRON_CONFIGS = os.getenv('CRON_CONFIGS', '0 0 * * *')
@@ -50,6 +51,7 @@ class Config:
     logger.info(f"DB_PORT: {DB_PORT}")
     logger.info(f"DB_USER: {DB_USER}")
     logger.info(f"DB_PASSWORD: {'*****' if DB_PASSWORD else ''}")
+    logger.info(f"DB_NAME: {DB_MAINTENANCE_NAME}")
     logger.info(f"DB_TYPE: {DB_TYPE}")
     logger.info(f"BACKUP_DIR: {BACKUP_DIR}")
     logger.info(f"CRON_CONFIGS: {CRON_CONFIGS}")

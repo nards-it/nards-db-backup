@@ -9,7 +9,7 @@ class AbstractModule(metaclass=ABCMeta):
     backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str):
+    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
         """
         Initializes the database module with connection details.
 
@@ -18,11 +18,13 @@ class AbstractModule(metaclass=ABCMeta):
             port (str): The port number of the database server.
             username (str): The username to connect to the database.
             password (str): The password to connect to the database.
+            maintenance_db (str): The name of the database used for maintenance.
         """
         self._host = host
         self._port = port
         self._username = username
         self._password = password
+        self._maintenance_db = maintenance_db
 
     @property
     def host(self) -> str:
@@ -61,6 +63,16 @@ class AbstractModule(metaclass=ABCMeta):
 
         Returns:
             str: The password to connect to the database.
+        """
+        return self._password
+
+    @property
+    def maintenance_db(self) -> str:
+        """
+        Returns the name of the database used for maintenance.
+
+        Returns:
+            str: The name of the database used for maintenance.
         """
         return self._password
 

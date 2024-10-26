@@ -36,6 +36,7 @@ Configure the application via environment variables. Create a `.env` file with t
 - `DB_PORT=5432`
 - `DB_USER=user`
 - `DB_PASSWORD=password`
+- `DB_MAINTENANCE_NAME=mydb`
 - `DB_TYPE=mysql` or `postgis`
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
 - `RESTORE_CONFIG_NAME=""`
@@ -66,10 +67,11 @@ services:
       DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306
       DB_USER: 'user'
       DB_PASSWORD: 'password'
+      DB_MAINTENANCE_NAME: 'mydatabase' # defaults to DB_USER
       DB_TYPE: 'postgres' # postgres/postgis/mysql
       BACKUP_DIR: /backups
       CRON_CONFIGS: '[{"cron": "0 * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
-      RESTORE_CONFIG_NAME: 'hourly'
+      # RESTORE_CONFIG_NAME: 'hourly' # When you have to restore some content
     volumes:
       - ./backups:/backups
 ```
