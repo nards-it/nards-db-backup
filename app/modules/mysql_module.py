@@ -95,7 +95,7 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"mysqldump -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
+        command = (f"mysqldump --complete-insert -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
                    f" {destination_file}")
         try:
             subprocess.run(command, shell=True, check=True, text=True)

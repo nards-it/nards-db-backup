@@ -87,7 +87,7 @@ class PostgresModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"pg_dump -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
+        command = (f"pg_dump --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
                    f" {destination_file}")
         try:
             # Set the PGPASSWORD environment variable to avoid password prompt
