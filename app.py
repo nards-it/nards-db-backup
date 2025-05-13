@@ -19,8 +19,10 @@ elif Config.DB_TYPE == 'postgis':
     from app.modules.postgis_module import PostGISModule as DatabaseModule
 elif Config.DB_TYPE == 'postgres':
     from app.modules.postgres_module import PostgresModule as DatabaseModule
+elif Config.DB_TYPE == 'mongodb':
+    from app.modules.mongodb_module import MongoDBModule as DatabaseModule
 else:
-    raise ValueError("Unsupported DB_TYPE. Use 'mysql' or 'postgis'.")
+    raise ValueError("Unsupported DB_TYPE. Use 'mysql', 'postgis', 'postgres' or 'mongodb'.")
 
 db_module = DatabaseModule(
     host=Config.DB_HOST,

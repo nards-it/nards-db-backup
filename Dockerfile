@@ -27,14 +27,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Use the official Python image from the Docker Hub
 FROM python:3.10-slim AS prod
 
-# Install dumb-init
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
+    curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
+    gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor && \
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/debian bookworm/mongodb-org/6.0 main" | \
+    tee /etc/apt/sources.list.d/mongodb-org-6.0.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     dumb-init \
     mariadb-client \
     postgresql-client \
-    libpq-dev \
-    && \
+    mongodb-database-tools \
+    libpq-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -54,7 +60,7 @@ COPY . /app
 EXPOSE 5000
 
 # Use curl to healthcheck based on health endpoint
-HEALTHCHECK --interval=60s --timeout=5s --start-period=0s --retries=12 \
+HEALTHCHECK --interval=60s --timeout=5s --start-period=5s --retries=12 \
   CMD curl -f http://127.0.0.1:5000/health || exit 1
 
 # Use dumb-init as the entrypoint to handle signal forwarding and zombie reaping

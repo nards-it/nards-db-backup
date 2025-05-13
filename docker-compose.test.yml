@@ -61,3 +61,40 @@ services:
       - ./backups:/backups
     depends_on:
       - postgis
+
+  mongo:
+    image: mongo:6.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: testuser
+      MONGO_INITDB_ROOT_PASSWORD: testpassword
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./tests/init_mongo.js:/docker-entrypoint-initdb.d/init_mongo.js:ro
+    healthcheck:
+      test: |
+        mongosh --host localhost --port 27017 --username $$MONGO_INITDB_ROOT_USERNAME --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval "db.adminCommand('ping')" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  nards_backup_mongo:
+    build: .
+    environment:
+      DB_HOST: mongo
+      DB_PORT: 27017
+      DB_USER: testuser
+      DB_PASSWORD: testpassword
+      DB_MAINTENANCE_NAME: admin
+      DB_TYPE: mongodb
+      BACKUP_DIR: /backups
+      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 5, "name": "mongo_backup"}]'
+      RESTORE_CONFIG_NAME: 'mongo_backup'
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./backups_mongo:/backups
+    depends_on:
+      mongo:
+        condition: service_healthy
