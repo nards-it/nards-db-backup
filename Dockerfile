@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-client \
     postgresql-client \
     libpq-dev \
+    docker.io \
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -54,7 +55,7 @@ COPY . /app
 EXPOSE 5000
 
 # Use curl to healthcheck based on health endpoint
-HEALTHCHECK --interval=60s --timeout=5s --start-period=0s --retries=12 \
+HEALTHCHECK --interval=60s --timeout=5s --start-period=5s --retries=12 \
   CMD curl -f http://127.0.0.1:5000/health || exit 1
 
 # Use dumb-init as the entrypoint to handle signal forwarding and zombie reaping
