@@ -10,10 +10,15 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     # Database configuration
-    DB_TYPE = os.getenv('DB_TYPE', 'mysql')  # 'mysql' or 'postgis'
+    DB_TYPE = os.getenv('DB_TYPE', 'mysql')  # 'mysql', 'postgis', or 'graphdb'
     DB_HOST = os.getenv('DB_HOST', 'localhost')
-    port_default = 3306 if DB_TYPE=='mysql' else 5432
-    DB_PORT = os.getenv('DB_PORT', port_default)
+    if DB_TYPE == 'mysql':
+        port_default = 3306
+    elif DB_TYPE == 'graphdb':
+        port_default = 7200
+    else:  # Default for postgres, postgis (attualmente postgis è l'unico altro gestito in app.py)
+        port_default = 5432
+    DB_PORT = os.getenv('DB_PORT', str(port_default)) # DB_PORT è usato come stringa nei moduli
     DB_USER = os.getenv('DB_USER', 'user')
     DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
     DB_MAINTENANCE_NAME = os.getenv('DB_MAINTENANCE_NAME', DB_USER)

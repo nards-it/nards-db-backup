@@ -18,7 +18,7 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 # Flask Backup Application
 
-A Flask application that schedules and manages database backups using cron jobs. It supports both MySQL and PostGIS databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostGIS, and GraphDB databases and can restore backups via command-line arguments.
 
 ## Features
 
@@ -37,7 +37,8 @@ Configure the application via environment variables. Create a `.env` file with t
 - `DB_USER=user`
 - `DB_PASSWORD=password`
 - `DB_MAINTENANCE_NAME=mydb`
-- `DB_TYPE=mysql` or `postgis`
+- `DB_TYPE=mysql`, `postgis`, or `graphdb`
+  - (When `DB_TYPE=graphdb`, `DB_PORT` is typically `7200`. `DB_USER` and `DB_PASSWORD` can often be left empty for default GraphDB Free installations if security is not enabled.)
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
 - `RESTORE_CONFIG_NAME=""`
 
@@ -64,11 +65,11 @@ services:
     build: .
     environment:
       DB_HOST: 'database'
-      DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306
+      DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306; graphdb: 7200
       DB_USER: 'user'
       DB_PASSWORD: 'password'
       DB_MAINTENANCE_NAME: 'mydatabase' # defaults to DB_USER
-      DB_TYPE: 'postgres' # postgres/postgis/mysql
+      DB_TYPE: 'postgres' # postgres/postgis/mysql/graphdb
       BACKUP_DIR: /backups
       CRON_CONFIGS: '[{"cron": "0 * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
       # RESTORE_CONFIG_NAME: 'hourly' # When you have to restore some content
@@ -125,7 +126,7 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
 - Docker (optional, for containerized deployment)
 - Python 3.9
-- MySQL or PostGIS database
+- MySQL, PostGIS, or GraphDB database
 
 ### Build using Docker
 

@@ -1,3 +1,36 @@
+# IntelliJ
 .idea/
+
+# Backup directory
 backups/
+
+# Virtualenv
 venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+*.log
+tests/temp_graphdb_backups/
+
+# Docker
+docker-compose.override.yml
+*.env
+.dockerignore
+
+# Test environment backup directories
+/backups_graphdb_test_env/ # For GraphDB test environment from docker-compose.test.yml

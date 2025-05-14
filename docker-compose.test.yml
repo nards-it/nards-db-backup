@@ -61,3 +61,39 @@ services:
       - ./backups:/backups
     depends_on:
       - postgis
+
+  graphdb:
+    image: ontotext/graphdb:11.0.0
+    container_name: graphdb_service_for_e2e_tests
+    ports:
+      - "7200:7200"
+    volumes:
+      - graphdb_e2e_data:/opt/graphdb/home
+    environment:
+      GDB_JAVA_OPTS: "-Xmx1g -Xms1g"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:7200/rest/repositories || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 15
+
+  nards_backup_graphdb:
+    build: .
+    environment:
+      DB_HOST: graphdb
+      DB_PORT: 7200
+      DB_USER: "" 
+      DB_PASSWORD: ""
+      DB_TYPE: graphdb
+      BACKUP_DIR: /app_backups
+      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 7, "name": "graphdb_e2e_backup"}]'
+    ports:
+      - "5003:5000"
+    volumes:
+      - ./backups_graphdb_e2e:/app_backups
+    depends_on:
+      graphdb:
+        condition: service_healthy
+
+volumes:
+  graphdb_e2e_data: {}
