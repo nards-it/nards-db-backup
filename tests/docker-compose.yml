@@ -41,3 +41,10 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+
+  graphdb:
+    image: ontotext/graphdb:11.0.0
+    ports:
+      - "0:7200"
+    environment:
+      GDB_JAVA_OPTS: "-Xmx1g -Xms1g"
