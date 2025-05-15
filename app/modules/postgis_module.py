@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 import subprocess
 import logging
+import json
 
 from app.modules.abstract_module import AbstractModule
 
@@ -87,6 +88,52 @@ class PostGISModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
+        # Capture used extensions
+        extensions = []
+        conn_ext = None
+        cur = None
+        try:
+            # Connect to the target database 'name' to fetch its extensions
+            conn_ext = psycopg2.connect(
+                host=self._host,
+                port=self._port,
+                user=self._username,
+                password=self._password,
+                dbname=name
+            )
+            cur = conn_ext.cursor()
+            cur.execute("SELECT extname FROM pg_extension WHERE extname <> 'plpgsql';")
+            extensions = [r[0] for r in cur.fetchall()]
+            logger.info(f"Successfully retrieved extensions for database '{name}': {extensions}")
+        except Error as e: # Catch psycopg2 specific errors for connection or query
+            logger.warning(f"Database error while retrieving extensions for '{name}': {e}. Proceeding with empty extensions list.")
+        except Exception as e: # Catch other unexpected errors
+            logger.warning(f"Unexpected error while retrieving extensions for '{name}': {e}. Proceeding with empty extensions list.")
+        finally:
+            if cur:
+                cur.close()
+            if conn_ext:
+                conn_ext.close()
+
+        # Generate .pre.sql file with extension creation commands
+        pre_sql_file = destination_file.with_suffix('.pre.sql')
+        pre_sql_content = []
+        # Always add postgis extension first for a PostGISModule
+        pre_sql_content.append("CREATE EXTENSION IF NOT EXISTS postgis;\n")
+
+        # Add other detected extensions, ensuring postgis is not duplicated if detected
+        for ext_name in extensions:
+            if ext_name.lower() != 'postgis':
+                pre_sql_content.append(f'CREATE EXTENSION IF NOT EXISTS "{ext_name}";\n')
+        
+        try:
+            pre_sql_file.write_text("".join(pre_sql_content))
+            logger.info(f"Saved pre-restore SQL script for extensions to {pre_sql_file}")
+            if not extensions: # Log if only postgis was added (no other extensions detected)
+                 logger.info(f"No additional extensions (beyond PostGIS) were detected for database '{name}' to include in {pre_sql_file}.")
+        except Exception as e:
+            logger.warning(f"Failed writing pre-restore SQL script {pre_sql_file} for database '{name}': {e}")
+        
         command = (f"pg_dump --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
                    f" {destination_file}")
         try:
@@ -133,9 +180,47 @@ class PostGISModule(AbstractModule):
             subprocess.run(create_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
             logger.info(f"Database {name} created successfully.")
 
-            # Enable PostGIS extension
-            subprocess.run(enable_postgis_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
-            logger.info(f"PostGIS extension enabled for database {name}.")
+            # Execute .pre.sql script if it exists to create extensions
+            pre_sql_file = source_file.with_suffix('.pre.sql')
+            if pre_sql_file.exists():
+                logger.info(f"Found pre-restore SQL script: {pre_sql_file}. Attempting to execute it.")
+                try:
+                    execute_pre_sql_command = (
+                        f"psql -h {self._host} -p {self._port} -U {self._username} "
+                        f"-d \"{name}\" -f \"{pre_sql_file}\""
+                    )
+                    # Capture output for better logging, especially errors
+                    result = subprocess.run(
+                        execute_pre_sql_command, shell=True, check=True, text=True, 
+                        env=env, capture_output=True, encoding='utf-8'
+                    )
+                    logger.info(f"Successfully executed pre-restore SQL script {pre_sql_file}.")
+                    if result.stdout:
+                        logger.debug(f"Output from {pre_sql_file} execution (stdout):\n{result.stdout}")
+                    if result.stderr: # Log stderr even on success, as psql might output notices here
+                        logger.info(f"Output from {pre_sql_file} execution (stderr):\n{result.stderr}")
+                except subprocess.CalledProcessError as e:
+                    logger.error(
+                        f"Error executing pre-restore SQL script {pre_sql_file} for database '{name}'. "
+                        f"Command: '{e.cmd}'. Return code: {e.returncode}."
+                    )
+                    if e.stdout:
+                        logger.error(f"Stdout from failed pre-sql script:\n{e.stdout}")
+                    if e.stderr:
+                        logger.error(f"Stderr from failed pre-sql script:\n{e.stderr}")
+                    # Critical: If extensions (like PostGIS) cannot be created,
+                    # the subsequent pg_restore is likely to fail or result in a corrupted database.
+                    # Therefore, we stop the restore process immediately.
+                    return False
+                except Exception as e:
+                    logger.error(f"Unexpected error executing pre-restore SQL script {pre_sql_file}: {e}")
+                    # Critical: If extensions (like PostGIS) cannot be created due to an unexpected error,
+                    # the subsequent pg_restore is likely to fail or result in a corrupted database.
+                    # Therefore, we stop the restore process immediately.
+                    return False
+            else:
+                logger.warning(f"Pre-restore SQL script {pre_sql_file} not found. "
+                               f"Extensions (beyond those in the main dump) might not be restored.")
 
             # Restore the database from the backup file
             subprocess.run(restore_command, shell=True, check=True, text=True, encoding='utf-8', env=env)

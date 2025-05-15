@@ -12,6 +12,7 @@ sys.path.insert(1, os.getcwd())
 import pytest
 from pathlib import Path
 import psycopg2
+import json
 
 @pytest.fixture(scope="session")
 def docker_compose_file(pytestconfig):
@@ -47,7 +48,7 @@ def check_postgis_connection(host, port, user, password, database=None):
 def postgis_connection(docker_ip, docker_services):
     docker_port = docker_services.port_for("postgis", 5432)
 
-    # Wait until docker iservice is ready to accept connections
+    # Wait until docker service is ready to accept connections
     docker_services.wait_until_responsive(
         timeout=60.0, pause=0.1, check= lambda: check_postgis_connection(
             host=docker_ip,
@@ -58,7 +59,7 @@ def postgis_connection(docker_ip, docker_services):
         )
     )
 
-    # Setup: connessione al database
+    # Setup: connect to the database
     connection = psycopg2.connect(
         host=docker_ip,
         port=docker_port,
@@ -71,10 +72,10 @@ def postgis_connection(docker_ip, docker_services):
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = connection.cursor()
 
-    # Creazione di un database di test da elencare
+    # Create a test database to be listed
     cursor.execute("CREATE DATABASE test_db_2")
 
-    # Creazione di un database di test
+    # Create a test database
     cursor.execute("CREATE DATABASE test_db")
 
     cursor.close()
@@ -85,7 +86,7 @@ def postgis_connection(docker_ip, docker_services):
     cursor.close()
     connection.close()
 
-    # Setup: connessione al database
+    # Setup: connect to the database
     connection = psycopg2.connect(
         host=docker_ip,
         port=docker_port,
@@ -98,8 +99,22 @@ def postgis_connection(docker_ip, docker_services):
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = connection.cursor()
 
-    # Teardown: eliminazione del database di test
+    # Teardown: delete the test database
+    # Terminate other connections to test_db before dropping
+    cursor.execute(f"""
+    SELECT pg_terminate_backend(pid)
+    FROM pg_stat_activity
+    WHERE datname = 'test_db' AND pid <> pg_backend_pid();
+    """)
+    connection.commit() # Commit termination
     cursor.execute("DROP DATABASE test_db")
+    # For test_db_2, termination might also be needed if tests connect to it and leave sessions
+    cursor.execute(f"""
+    SELECT pg_terminate_backend(pid)
+    FROM pg_stat_activity
+    WHERE datname = 'test_db_2' AND pid <> pg_backend_pid();
+    """)
+    connection.commit() # Commit termination
     cursor.execute("DROP DATABASE test_db_2")
 
     cursor.close()
@@ -121,13 +136,17 @@ def test_list_all_databases(postgis_module, docker_services):
 def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, postgis_module):
     docker_port = docker_services.port_for("postgis", 5432)
 
-    # Percorso del file di backup
+    # Backup file path
     backup_file = Path(str(pytestconfig.rootdir), "tests", "test_postgis_db_backup.sql")
+    pre_sql_file = backup_file.with_suffix('.pre.sql') # Define pre_sql_file path
+
     if backup_file.exists():
         os.remove(backup_file)
+    if pre_sql_file.exists(): # Ensure .pre.sql is also cleaned up
+        os.remove(pre_sql_file)
     try:
 
-        # Setup: connessione al database
+        # Setup: connect to the database
         connection = psycopg2.connect(
             host=docker_ip,
             port=docker_port,
@@ -145,15 +164,25 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
                 """)
         connection.commit()
 
-        # Inserimento di dati nel database
+        # Insert data into the database
         cursor.execute("INSERT INTO test_table (data) VALUES ('Original Data')")
         connection.commit()
 
-        # Esecuzione del backup
+        # Enable pgvector before dump
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        connection.commit()
+
+        # Perform backup
         backup_result = postgis_module.backup_database('test_db', backup_file)
         assert backup_result
 
-        # Alterazione dei dati
+        # Verifica che il file .pre.sql delle estensioni sia stato creato e il suo contenuto
+        assert pre_sql_file.exists(), f".pre.sql file not created: {pre_sql_file}"
+        pre_sql_content = pre_sql_file.read_text()
+        assert "CREATE EXTENSION IF NOT EXISTS postgis;" in pre_sql_content, "Command for postgis missing in .pre.sql"
+        assert 'CREATE EXTENSION IF NOT EXISTS "vector";' in pre_sql_content, "Command for vector missing in .pre.sql"
+
+        # Alter data
         cursor.execute("DELETE FROM test_table")
         cursor.execute("INSERT INTO test_table (data) VALUES ('Altered Data')")
         connection.commit()
@@ -161,11 +190,11 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
         cursor.close()
         connection.close()
 
-        # Esecuzione del restore
+        # Perform restore
         restore_result = postgis_module.restore_database('test_db', backup_file)
         assert restore_result
 
-        # Setup: connessione al database
+        # Setup: connect to the database
         connection = psycopg2.connect(
             host=docker_ip,
             port=docker_port,
@@ -183,7 +212,7 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
                 """)
         connection.commit()
 
-        # Verifica che i dati originali siano stati ripristinati
+        # Verify that original data has been restored
         cursor.execute("SELECT data FROM test_table")
         restored_data = cursor.fetchone()[0]
 
@@ -197,6 +226,11 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
         has_postgis = cursor.fetchone()[0]
         assert has_postgis, "PostGIS extension is not present in the database after restore."
 
+        # Verify that pgvector has been restored
+        cursor.execute("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector');")
+        has_vector = cursor.fetchone()[0]
+        assert has_vector, "pgvector extension is not present in the database after restore."
+
         cursor.close()
         connection.close()
 
@@ -205,3 +239,5 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
     finally:
         if backup_file.exists():
             os.remove(backup_file)
+        # if pre_sql_file.exists(): # Temporarily commented out to inspect the .pre.sql file
+        #     os.remove(pre_sql_file)
