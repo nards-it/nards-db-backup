@@ -2,9 +2,9 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ 11-test-automation-pipeline-temp ]
   pull_request:
-    branches: [ main ]
+    branches: [ 11-test-automation-pipeline-temp ]
 
 jobs:
   test:
