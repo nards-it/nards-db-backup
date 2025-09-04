@@ -126,6 +126,7 @@ def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_modul
         assert restore_result
 
         # Verifica che i dati originali siano stati ripristinati
+        cursor.execute("USE test_db")
         cursor.execute("SELECT data FROM test_table")
         restored_data = cursor.fetchone()[0]
         assert restored_data == 'Original Data'

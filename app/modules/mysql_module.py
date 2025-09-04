@@ -95,7 +95,7 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"mysqldump --complete-insert -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
+        command = (f"docker exec mysql mysqldump --add-drop-database --complete-insert -u {self._username} -p{self._password} --databases {name} >"
                    f" {destination_file}")
         try:
             subprocess.run(command, shell=True, check=True, text=True)
@@ -116,24 +116,23 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        drop_command = (f"mysql -h {self._host} -P {self._port} -u {self._username} -p{self._password}"
-                        f" -e 'DROP DATABASE IF EXISTS {name}; CREATE DATABASE {name};'")
-        restore_command = (f"mysql -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name}"
-                           f" < {source_file}")
+        container_path = f"/tmp/{source_file.name}"
+        copy_command = f"docker cp {source_file} mysql:{container_path}"
+        restore_command = (f"docker exec mysql sh -c 'mysql -u {self._username} -p{self._password} "
+                           f"< {container_path}'")
+        remove_command = f"docker exec mysql rm {container_path}"
 
         try:
-            # Drop and recreate the database
-            subprocess.run(drop_command, shell=True, check=True, text=True, encoding='utf-8')
-            logger.info(f"Database {name} dropped and recreated successfully.")
+            # Copy the backup file into the container
+            subprocess.run(copy_command, shell=True, check=True, text=True, encoding='utf-8')
 
             # Restore the database from the backup file
             subprocess.run(restore_command, shell=True, check=True, text=True, encoding='utf-8')
+
             logger.info(f"Restore successful for database {name} from {source_file}.")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(
-                f"Error restoring database {name}: {e}. Command: "
-                f"{drop_command if e.cmd == drop_command else restore_command}")
+            logger.error(f"Error restoring database {name}: {e}. Command: {e.cmd}")
             return False
         except FileNotFoundError:
             logger.error(f"Backup file {source_file} not found.")
@@ -141,3 +140,5 @@ class MySQLModule(AbstractModule):
         except Exception as e:
             logger.error(f"Unexpected error occurred while restoring database {name}: {e}")
             return False
+        finally:
+            subprocess.run(remove_command, shell=True, check=False)
