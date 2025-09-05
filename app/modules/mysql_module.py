@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 import subprocess
 import logging
+import os
 
 from app.modules.abstract_module import AbstractModule
 
@@ -95,7 +96,11 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"mysqldump --complete-insert -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
+        ssl_mode_param = ""
+        if os.environ.get("MYSQL_SSL_MODE") == "DISABLED":
+            ssl_mode_param = "--skip-ssl"
+
+        command = (f"mysqldump {ssl_mode_param} --complete-insert -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
                    f" {destination_file}")
         try:
             subprocess.run(command, shell=True, check=True, text=True)
@@ -116,9 +121,13 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        drop_command = (f"mysql -h {self._host} -P {self._port} -u {self._username} -p{self._password}"
+        ssl_mode_param = ""
+        if os.environ.get("MYSQL_SSL_MODE") == "DISABLED":
+            ssl_mode_param = "--skip-ssl"
+
+        drop_command = (f"mysql {ssl_mode_param} -h {self._host} -P {self._port} -u {self._username} -p{self._password}"
                         f" -e 'DROP DATABASE IF EXISTS {name}; CREATE DATABASE {name};'")
-        restore_command = (f"mysql -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name}"
+        restore_command = (f"mysql {ssl_mode_param} -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name}"
                            f" < {source_file}")
 
         try:

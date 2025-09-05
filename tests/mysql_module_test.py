@@ -1,6 +1,6 @@
 import os
 import sys
-
+import time
 from mysql.connector import Error
 
 # insert root directory into python module search path
@@ -11,57 +11,36 @@ from pathlib import Path
 import mysql.connector
 from app.modules.mysql_module import MySQLModule
 
-@pytest.fixture(scope="session")
-def docker_compose_file(pytestconfig):
-    return os.path.join(str(pytestconfig.rootdir), "tests", "docker-compose.yml")
-
-
-def check_mysql_connection(host, port, user, password, database=None):
-    """Check if MySQL server is ready for connections."""
-    connection = None
-    try:
-        # Establish a connection to the MySQL server
-        connection = mysql.connector.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database=database
-        )
-
-        if connection.is_connected():
-            print("MySQL server is ready for connections.")
-            return True
-
-    except Error:
-        return False
-
-    finally:
-        # Close the connection if it was established
-        if connection is not None and connection.is_connected():
-            connection.close()
-
 @pytest.fixture(scope='session', autouse=True)
-def mysql_connection(docker_ip, docker_services):
-    docker_port = docker_services.port_for("mysql", 3306)
-
-    # Wait until docker iservice is ready to accept connections
-    docker_services.wait_until_responsive(
-        timeout=60.0, pause=0.1, check= lambda: check_mysql_connection(
-            host=docker_ip,
-            port=docker_port,
-            user='test_user',
-            password='test_password'
-        )
-    )
-
-    # Setup: connessione al database
-    connection = mysql.connector.connect(
-        host=docker_ip,
-        port=docker_port,
-        user='root',
-        password='rootpassword'
-    )
+def mysql_connection():
+    """
+    Waits for the MySQL container to be ready, then sets up the database for tests.
+    """
+    host = os.environ.get("DB_HOST_MYSQL")
+    port = os.environ.get("DB_PORT_MYSQL")
+    user = 'root'
+    password = 'rootpassword'
+    
+    connection = None
+    retries = 20
+    while retries > 0:
+        try:
+            connection = mysql.connector.connect(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+            )
+            if connection.is_connected():
+                print("MySQL server is ready for connections.")
+                break
+        except Error as e:
+            print(f"Waiting for MySQL... ({retries} retries left)")
+            retries -= 1
+            time.sleep(3)
+            if retries == 0:
+                raise e
+    
     cursor = connection.cursor()
 
     # Creazione di un database di test da elencare
@@ -88,18 +67,31 @@ def mysql_connection(docker_ip, docker_services):
 
 
 @pytest.fixture
-def mysql_module(docker_ip, docker_services):
-    docker_port = docker_services.port_for("mysql", 3306)
-    return MySQLModule(docker_ip, docker_port, 'root', 'rootpassword', "test_database")
+def mysql_module():
+    """
+    Initializes the MySQLModule with connection details from environment variables.
+    """
+    host = os.environ.get("DB_HOST_MYSQL")
+    port = os.environ.get("DB_PORT_MYSQL")
+    user = 'root'
+    password = 'rootpassword'
+    db_name = os.environ.get("DB_NAME_MYSQL")
+    return MySQLModule(host, port, user, password, db_name)
 
 
-def test_list_all_databases(mysql_module, docker_services):
+def test_list_all_databases(mysql_module):
+    """
+    Tests that the list_all_databases method returns the created test databases.
+    """
     result = mysql_module.list_all_databases()
     assert 'test_db_2' in result
     assert 'test_db' in result
 
 
 def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_module):
+    """
+    Tests the full backup and restore cycle for a MySQL database.
+    """
     connection, cursor = mysql_connection
 
     # Percorso del file di backup
@@ -107,13 +99,12 @@ def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_modul
     if backup_file.exists():
         os.remove(backup_file)
     try:
-
         # Inserimento di dati nel database
         cursor.execute("INSERT INTO test_table (data) VALUES ('Original Data')")
         connection.commit()
 
         # Esecuzione del backup
-        backup_result = mysql_module.backup_database('test_db', backup_file)
+        backup_result = mysql_module.backup_database('test_db', str(backup_file))
         assert backup_result
 
         # Alterazione dei dati
@@ -122,7 +113,7 @@ def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_modul
         connection.commit()
 
         # Esecuzione del restore
-        restore_result = mysql_module.restore_database('test_db', backup_file)
+        restore_result = mysql_module.restore_database('test_db', str(backup_file))
         assert restore_result
 
         # Verifica che i dati originali siano stati ripristinati

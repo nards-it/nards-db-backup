@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import List
 import subprocess
 import logging
+import os
 
 from app.modules.abstract_module import AbstractModule
 
@@ -87,7 +88,10 @@ class PostGISModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"pg_dump --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
+        clean_param = ""
+        if os.environ.get("PG_RESTORE_CLEAN") == "true":
+            clean_param = "--no-owner --no-privileges"
+        command = (f"pg_dump {clean_param} --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
                    f" {destination_file}")
         try:
             # Set the PGPASSWORD environment variable to avoid password prompt
@@ -122,7 +126,10 @@ class PostGISModule(AbstractModule):
                           f"-c 'CREATE DATABASE {name};'")
         enable_postgis_command = (f"psql -h {self._host} -p {self._port} -U {self._username} -d {name} "
                                   f"-c 'CREATE EXTENSION postgis;'")
-        restore_command = f"pg_restore -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
+        clean_param = ""
+        if os.environ.get("PG_RESTORE_CLEAN") == "true":
+            clean_param = "--clean --if-exists"
+        restore_command = f"pg_restore {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
 
         try:
             # Drop the database
