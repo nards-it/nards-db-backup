@@ -99,4 +99,3 @@ def test_run_app_without_startup_restore(monkeypatch, tmp_path, pytestconfig):
     # Only scheduler should start
     assert calls == ["start"]
     assert fake_db.restore_called is False
-
