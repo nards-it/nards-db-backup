@@ -147,6 +147,40 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
    `python app.py`
 
+## Testing
+
+You can run the test suite in two ways, either mirroring the CI pipeline with Docker Compose, or directly from your local virtual environment using pytest (with Docker-managed services).
+
+### CI-like (Docker Compose)
+
+- Run tests in containers (same as GitHub Actions):
+
+  `docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner`
+
+- Tear down (optional if you used `--exit-code-from`, containers stop automatically):
+
+  `docker compose -f docker-compose.test.yml down -v`
+
+### Local venv + pytest
+
+- Requirements:
+  - Docker installed and running
+  - Database CLI tools available on your host PATH:
+    - MySQL: `mysqldump` (from `mariadb-client` or `mysql-client`)
+    - PostgreSQL: `pg_dump`, `pg_restore`, `psql` (from `postgresql-client`)
+  - Python dependencies installed: `pip install -r requirements.txt`
+
+- Run tests from your venv; the test stack is auto-started by pytest (pytest-docker):
+
+  `source venv/bin/activate && pytest -q`
+
+- Notes:
+  - `tests/conftest.py` automatically brings up services from `tests/docker-compose.yml` and exports the needed env vars; no manual setup needed.
+  - If you have an existing container named `mysql` running, you may see a name conflict. Stop it or run:
+
+    `docker compose -f tests/docker-compose.yml down -v`
+
+
 ## License
 
 This project is licensed under the GPL v3. See the [LICENSE](LICENSE) file for details.
