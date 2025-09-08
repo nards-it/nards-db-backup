@@ -101,7 +101,12 @@ def restore(name_or_path):
             logger.warning(f"No backups found for configuration '{restore_cron_name}'")
 
 
-if __name__ == "__main__":
+def run_app(start_server: bool = True) -> None:
+    """Run the application bootstrap sequence.
+
+    Optionally performs a startup restore if configured, starts the scheduler,
+    and starts the Flask server if requested.
+    """
     if Config.RESTORE_CONFIG_NAME:
         logger.info(f"Startup restore is configured at {Config.RESTORE_CONFIG_NAME}")
         cron_name = Config.RESTORE_CONFIG_NAME
@@ -129,4 +134,9 @@ if __name__ == "__main__":
                     f"Restore failed at startup for configuration '{cron_name}'"
                 )
     scheduler.start()
-    app.run(host="0.0.0.0", port=5000)
+    if start_server:
+        app.run(host="0.0.0.0", port=5000)
+
+
+if __name__ == "__main__":
+    run_app(start_server=True)
