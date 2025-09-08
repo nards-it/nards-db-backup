@@ -8,6 +8,7 @@ def docker_compose_file(pytestconfig):
     """Point pytest-docker to the test docker-compose file."""
     return os.path.join(str(pytestconfig.rootdir), "tests", "docker-compose.yml")
 
+
 @pytest.fixture(scope="session")
 def docker_compose_command():
     """Pick the Compose command available in the environment."""
