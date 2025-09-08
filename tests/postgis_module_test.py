@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-from psycopg2 import Error
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from app.modules.postgis_module import PostGISModule

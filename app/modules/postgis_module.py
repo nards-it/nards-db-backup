@@ -96,7 +96,7 @@ class PostGISModule(AbstractModule):
         try:
             # Set the PGPASSWORD environment variable to avoid password prompt
             env = {"PGPASSWORD": self._password}
-            result = subprocess.run(command, shell=True, check=True, text=True, env=env)
+            subprocess.run(command, shell=True, check=True, text=True, env=env)
             logger.info(f"Backup successful for database {name} to {destination_file}.")
             return True
         except subprocess.CalledProcessError as e:
