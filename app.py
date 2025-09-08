@@ -13,11 +13,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize the appropriate database module based on the configuration
-if Config.DB_TYPE == 'mysql':
+if Config.DB_TYPE == "mysql":
     from app.modules.mysql_module import MySQLModule as DatabaseModule
-elif Config.DB_TYPE == 'postgis':
+elif Config.DB_TYPE == "postgis":
     from app.modules.postgis_module import PostGISModule as DatabaseModule
-elif Config.DB_TYPE == 'postgres':
+elif Config.DB_TYPE == "postgres":
     from app.modules.postgres_module import PostgresModule as DatabaseModule
 else:
     raise ValueError("Unsupported DB_TYPE. Use 'mysql', 'postgres' or 'postgis'.")
@@ -27,18 +27,16 @@ db_module = DatabaseModule(
     port=Config.DB_PORT,
     username=Config.DB_USER,
     password=Config.DB_PASSWORD,
-    maintenance_db=Config.DB_MAINTENANCE_NAME
+    maintenance_db=Config.DB_MAINTENANCE_NAME,
 )
 
 # Initialize the scheduler with multiple cron configurations
 scheduler = Scheduler(
-    db_module=db_module,
-    cron_configs=Config.CRON_CONFIGS,
-    backup_dir=Config.BACKUP_DIR
+    db_module=db_module, cron_configs=Config.CRON_CONFIGS, backup_dir=Config.BACKUP_DIR
 )
 
 
-@app.route('/health', methods=['GET'])
+@app.route("/health", methods=["GET"])
 def health():
     """Endpoint to get the current health state of the last backup operation."""
     if scheduler.get_health():
@@ -59,8 +57,12 @@ def restore(name_or_path):
     if os.path.exists(name_or_path):
         # If a file path is provided
         backup_path = Path(name_or_path)
-        restore_db_name = backup_path.name.rsplit('.', 1)[0]  # Extract the database name from the file name
-        logger.info(f"Attempting to restore database '{restore_db_name}' from file '{name_or_path}'")
+        restore_db_name = backup_path.name.rsplit(".", 1)[
+            0
+        ]  # Extract the database name from the file name
+        logger.info(
+            f"Attempting to restore database '{restore_db_name}' from file '{name_or_path}'"
+        )
         restore_success = db_module.restore_database(restore_db_name, backup_path)
         if restore_success:
             logger.info(f"Restore successful for '{name_or_path}'")
@@ -70,39 +72,61 @@ def restore(name_or_path):
         # If a configuration name is provided
         restore_cron_name = name_or_path
         restore_backup_dir = Config.BACKUP_DIR / restore_cron_name
-        backup_file = max(restore_backup_dir.glob('**/*.backup'), key=os.path.getmtime, default=None)
+        backup_file = max(
+            restore_backup_dir.glob("**/*.backup"), key=os.path.getmtime, default=None
+        )
         if backup_file:
             backup_file_path = Path(backup_file)
-            restore_db_name = backup_file_path.name.rsplit('.', 1)[0]  # Extract the database name from the file name
-            logger.info(f"Attempting to restore database '{restore_db_name}' from latest backup '{backup_file}' for "
-                        f"configuration '{restore_cron_name}'")
-            restore_success = db_module.restore_database(restore_db_name, backup_file_path)
+            restore_db_name = backup_file_path.name.rsplit(".", 1)[
+                0
+            ]  # Extract the database name from the file name
+            logger.info(
+                f"Attempting to restore database '{restore_db_name}' from latest backup '{backup_file}' for "
+                f"configuration '{restore_cron_name}'"
+            )
+            restore_success = db_module.restore_database(
+                restore_db_name, backup_file_path
+            )
             if restore_success:
-                logger.info(f"Restore successful for configuration '{restore_cron_name}' "
-                            f"using backup file '{backup_file}'")
+                logger.info(
+                    f"Restore successful for configuration '{restore_cron_name}' "
+                    f"using backup file '{backup_file}'"
+                )
             else:
-                logger.error(f"Restore failed for configuration '{restore_cron_name}' "
-                             f"using backup file '{backup_file}'")
+                logger.error(
+                    f"Restore failed for configuration '{restore_cron_name}' "
+                    f"using backup file '{backup_file}'"
+                )
         else:
             logger.warning(f"No backups found for configuration '{restore_cron_name}'")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     if Config.RESTORE_CONFIG_NAME:
         logger.info(f"Startup restore is configured at {Config.RESTORE_CONFIG_NAME}")
         cron_name = Config.RESTORE_CONFIG_NAME
         backup_dir = Config.BACKUP_DIR / cron_name
-        latest_backup = max(backup_dir.glob('**/*.backup'), key=os.path.getmtime, default=None)
+        latest_backup = max(
+            backup_dir.glob("**/*.backup"), key=os.path.getmtime, default=None
+        )
         logger.info(f"Detected latest backup: {latest_backup}")
         if latest_backup:
             latest_backup_path = Path(latest_backup)
-            db_name = latest_backup_path.name.rsplit('.', 2)[0]  # Extract the database name from the file name
-            logger.info(f"Attempting to restore database '{db_name}' from latest backup '{latest_backup}' for "
-                        f"configuration '{cron_name}' at startup")
+            db_name = latest_backup_path.name.rsplit(".", 2)[
+                0
+            ]  # Extract the database name from the file name
+            logger.info(
+                f"Attempting to restore database '{db_name}' from latest backup '{latest_backup}' for "
+                f"configuration '{cron_name}' at startup"
+            )
             success = db_module.restore_database(db_name, latest_backup_path)
             if success:
-                logger.info(f"Restore successful at startup for configuration '{cron_name}'")
+                logger.info(
+                    f"Restore successful at startup for configuration '{cron_name}'"
+                )
             else:
-                logger.error(f"Restore failed at startup for configuration '{cron_name}'")
+                logger.error(
+                    f"Restore failed at startup for configuration '{cron_name}'"
+                )
     scheduler.start()
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host="0.0.0.0", port=5000)

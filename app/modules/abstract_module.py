@@ -9,7 +9,9 @@ class AbstractModule(metaclass=ABCMeta):
     backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
+    def __init__(
+        self, host: str, port: str, username: str, password: str, maintenance_db: str
+    ):
         """
         Initializes the database module with connection details.
 

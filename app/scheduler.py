@@ -41,7 +41,9 @@ class Scheduler:
             cron_name = cron_config.get("name")
             self.logger.info(f"Scheduling backup for cron configuration: {cron_name}")
             trigger = CronTrigger.from_crontab(cron_expr)
-            self.scheduler.add_job(self.run_backup, trigger, args=[cron_name, retention_max])
+            self.scheduler.add_job(
+                self.run_backup, trigger, args=[cron_name, retention_max]
+            )
         self.scheduler.start()
 
     def run_backup(self, cron_name, retention_max):
@@ -78,7 +80,9 @@ class Scheduler:
             Path: The calculated backup file path.
         """
         now = datetime.now()
-        backup_path = self.backup_dir / cron_name / str(now.year) / str(now.month) / str(now.day)
+        backup_path = (
+            self.backup_dir / cron_name / str(now.year) / str(now.month) / str(now.day)
+        )
         backup_path.mkdir(parents=True, exist_ok=True)
         backup_file = backup_path / f"{db_name}.{now.strftime('%Y%m%d%H%M%S')}.backup"
         self.logger.info(f"Calculated backup file path: {backup_file}")
@@ -94,9 +98,11 @@ class Scheduler:
             retention_max (int): The maximum number of backups to retain.
         """
         db_backup_dir = self.backup_dir / cron_name
-        all_backups = list(db_backup_dir.glob(f'**/{db_name}.*.backup'))
+        all_backups = list(db_backup_dir.glob(f"**/{db_name}.*.backup"))
         all_backups.sort(key=os.path.getmtime, reverse=True)
-        self.logger.info(f"Cleaning up old backups on '{cron_name}' for '{db_name}' db, keeping the latest {retention_max} backups")
+        self.logger.info(
+            f"Cleaning up old backups on '{cron_name}' for '{db_name}' db, keeping the latest {retention_max} backups"
+        )
         if len(all_backups) > retention_max:
             for old_backup in all_backups[retention_max:]:
                 self.logger.info(f"Deleting old backup: {old_backup}")

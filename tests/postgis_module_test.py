@@ -12,7 +12,8 @@ import pytest
 from pathlib import Path
 import psycopg2
 
-@pytest.fixture(scope='session', autouse=True)
+
+@pytest.fixture(scope="session", autouse=True)
 def postgis_connection():
     """
     Waits for the PostGIS container to be ready, then sets up the database for tests.
@@ -61,11 +62,7 @@ def postgis_connection():
 
     # Teardown: eliminazione del database di test
     connection = psycopg2.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        dbname=db_name
+        host=host, port=port, user=user, password=password, dbname=db_name
     )
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = connection.cursor()
@@ -94,8 +91,8 @@ def test_list_all_databases(postgis_module):
     Tests that the list_all_databases method returns the created test databases.
     """
     result = postgis_module.list_all_databases()
-    assert 'test_db_2' in result
-    assert 'test_db' in result
+    assert "test_db_2" in result
+    assert "test_db" in result
 
 
 def test_backup_and_restore_database(pytestconfig, postgis_module):
@@ -114,11 +111,7 @@ def test_backup_and_restore_database(pytestconfig, postgis_module):
     try:
         # Setup: connessione al database
         connection = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database='test_db'
+            host=host, port=port, user=user, password=password, database="test_db"
         )
         cursor = connection.cursor()
 
@@ -135,7 +128,7 @@ def test_backup_and_restore_database(pytestconfig, postgis_module):
         connection.commit()
 
         # Esecuzione del backup
-        backup_result = postgis_module.backup_database('test_db', str(backup_file))
+        backup_result = postgis_module.backup_database("test_db", str(backup_file))
         assert backup_result
 
         # Alterazione dei dati
@@ -147,24 +140,20 @@ def test_backup_and_restore_database(pytestconfig, postgis_module):
         connection.close()
 
         # Esecuzione del restore
-        restore_result = postgis_module.restore_database('test_db', str(backup_file))
+        restore_result = postgis_module.restore_database("test_db", str(backup_file))
         assert restore_result
 
         # Setup: connessione al database
         connection = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database='test_db'
+            host=host, port=port, user=user, password=password, database="test_db"
         )
         cursor = connection.cursor()
 
         # Verifica che i dati originali siano stati ripristinati
         cursor.execute("SELECT data FROM test_table")
         restored_data = cursor.fetchone()[0]
-        assert restored_data == 'Original Data'
-        
+        assert restored_data == "Original Data"
+
         cursor.execute("""
                     SELECT EXISTS (
                         SELECT 1
@@ -173,7 +162,9 @@ def test_backup_and_restore_database(pytestconfig, postgis_module):
                     );
                 """)
         has_postgis = cursor.fetchone()[0]
-        assert has_postgis, "PostGIS extension is not present in the database after restore."
+        assert has_postgis, (
+            "PostGIS extension is not present in the database after restore."
+        )
 
         cursor.close()
         connection.close()

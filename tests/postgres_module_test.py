@@ -11,7 +11,8 @@ from pathlib import Path
 import psycopg2
 from app.modules.postgres_module import PostgresModule
 
-@pytest.fixture(scope='session', autouse=True)
+
+@pytest.fixture(scope="session", autouse=True)
 def postgres_connection():
     """
     Waits for the PostgreSQL container to be ready, then sets up the database for tests.
@@ -60,11 +61,7 @@ def postgres_connection():
 
     # Teardown: eliminazione del database di test
     connection = psycopg2.connect(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        dbname=db_name
+        host=host, port=port, user=user, password=password, dbname=db_name
     )
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = connection.cursor()
@@ -93,8 +90,8 @@ def test_list_all_databases(postgres_module):
     Tests that the list_all_databases method returns the created test databases.
     """
     result = postgres_module.list_all_databases()
-    assert 'test_db_2' in result
-    assert 'test_db' in result
+    assert "test_db_2" in result
+    assert "test_db" in result
 
 
 def test_backup_and_restore_database(pytestconfig, postgres_module):
@@ -107,17 +104,15 @@ def test_backup_and_restore_database(pytestconfig, postgres_module):
     password = os.environ.get("DB_PASSWORD_POSTGRES")
 
     # Percorso del file di backup
-    backup_file = Path(str(pytestconfig.rootdir), "tests", "test_postgres_db_backup.sql")
+    backup_file = Path(
+        str(pytestconfig.rootdir), "tests", "test_postgres_db_backup.sql"
+    )
     if backup_file.exists():
         os.remove(backup_file)
     try:
         # Setup: connessione al database
         connection = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database='test_db'
+            host=host, port=port, user=user, password=password, database="test_db"
         )
         cursor = connection.cursor()
 
@@ -134,7 +129,7 @@ def test_backup_and_restore_database(pytestconfig, postgres_module):
         connection.commit()
 
         # Esecuzione del backup
-        backup_result = postgres_module.backup_database('test_db', str(backup_file))
+        backup_result = postgres_module.backup_database("test_db", str(backup_file))
         assert backup_result
 
         # Alterazione dei dati
@@ -146,23 +141,19 @@ def test_backup_and_restore_database(pytestconfig, postgres_module):
         connection.close()
 
         # Esecuzione del restore
-        restore_result = postgres_module.restore_database('test_db', str(backup_file))
+        restore_result = postgres_module.restore_database("test_db", str(backup_file))
         assert restore_result
 
         # Setup: connessione al database
         connection = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database='test_db'
+            host=host, port=port, user=user, password=password, database="test_db"
         )
         cursor = connection.cursor()
 
         # Verifica che i dati originali siano stati ripristinati
         cursor.execute("SELECT data FROM test_table")
         restored_data = cursor.fetchone()[0]
-        assert restored_data == 'Original Data'
+        assert restored_data == "Original Data"
 
         cursor.close()
         connection.close()

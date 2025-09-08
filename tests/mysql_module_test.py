@@ -11,16 +11,17 @@ from pathlib import Path
 import mysql.connector
 from app.modules.mysql_module import MySQLModule
 
-@pytest.fixture(scope='session', autouse=True)
+
+@pytest.fixture(scope="session", autouse=True)
 def mysql_connection():
     """
     Waits for the MySQL container to be ready, then sets up the database for tests.
     """
     host = os.environ.get("DB_HOST_MYSQL")
     port = os.environ.get("DB_PORT_MYSQL")
-    user = 'root'
-    password = 'rootpassword'
-    
+    user = "root"
+    password = "rootpassword"
+
     connection = None
     retries = 20
     while retries > 0:
@@ -40,7 +41,7 @@ def mysql_connection():
             time.sleep(3)
             if retries == 0:
                 raise e
-    
+
     cursor = connection.cursor()
 
     # Creazione di un database di test da elencare
@@ -73,8 +74,8 @@ def mysql_module():
     """
     host = os.environ.get("DB_HOST_MYSQL")
     port = os.environ.get("DB_PORT_MYSQL")
-    user = 'root'
-    password = 'rootpassword'
+    user = "root"
+    password = "rootpassword"
     db_name = os.environ.get("DB_NAME_MYSQL")
     return MySQLModule(host, port, user, password, db_name)
 
@@ -84,8 +85,8 @@ def test_list_all_databases(mysql_module):
     Tests that the list_all_databases method returns the created test databases.
     """
     result = mysql_module.list_all_databases()
-    assert 'test_db_2' in result
-    assert 'test_db' in result
+    assert "test_db_2" in result
+    assert "test_db" in result
 
 
 def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_module):
@@ -104,7 +105,7 @@ def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_modul
         connection.commit()
 
         # Esecuzione del backup
-        backup_result = mysql_module.backup_database('test_db', str(backup_file))
+        backup_result = mysql_module.backup_database("test_db", str(backup_file))
         assert backup_result
 
         # Alterazione dei dati
@@ -113,14 +114,14 @@ def test_backup_and_restore_database(pytestconfig, mysql_connection, mysql_modul
         connection.commit()
 
         # Esecuzione del restore
-        restore_result = mysql_module.restore_database('test_db', str(backup_file))
+        restore_result = mysql_module.restore_database("test_db", str(backup_file))
         assert restore_result
 
         # Verifica che i dati originali siano stati ripristinati
         cursor.execute("USE test_db")
         cursor.execute("SELECT data FROM test_table")
         restored_data = cursor.fetchone()[0]
-        assert restored_data == 'Original Data'
+        assert restored_data == "Original Data"
 
     finally:
         if backup_file.exists():
