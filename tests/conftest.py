@@ -8,9 +8,21 @@ def docker_compose_file(pytestconfig):
     """Point pytest-docker to the test docker-compose file."""
     return os.path.join(str(pytestconfig.rootdir), "tests", "docker-compose.yml")
 
+@pytest.fixture(scope="session")
+def docker_compose_command():
+    """Pick the Compose command available in the environment."""
+    import shutil
+
+    if shutil.which("docker"):
+        return "docker compose"
+    if shutil.which("docker-compose"):
+        return "docker-compose"
+    # Fallback to the modern default
+    return "docker compose"
+
 
 @pytest.fixture(scope="session", autouse=True)
-def ensure_services_for_local(docker_services):
+def ensure_services_for_local(request):
     """
     For local runs: if DB_* env vars are not set, start test DBs via docker-compose
     and export the expected environment variables for tests. In CI, env vars are
@@ -23,7 +35,12 @@ def ensure_services_for_local(docker_services):
         and os.environ.get("DB_HOST_POSTGRES")
         and os.environ.get("DB_HOST_POSTGIS")
     ):
+        # Yield to satisfy generator fixture contract
+        yield
         return
+
+    # Get docker_services fixture only when needed
+    docker_services = request.getfixturevalue("docker_services")
 
     # Resolve published ports for local Docker engine
     mysql_port = docker_services.port_for("mysql", 3306)
@@ -70,4 +87,3 @@ def ensure_services_for_local(docker_services):
 
     # Yield to tests; docker_services handles teardown automatically
     yield
-
