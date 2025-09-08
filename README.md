@@ -18,7 +18,7 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 # Flask Backup Application
 
-A Flask application that schedules and manages database backups using cron jobs. It supports both MySQL and PostGIS databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL and PostGIS databases and can restore backups via command-line arguments.
 
 ## Features
 
@@ -37,7 +37,7 @@ Configure the application via environment variables. Create a `.env` file with t
 - `DB_USER=user`
 - `DB_PASSWORD=password`
 - `DB_MAINTENANCE_NAME=mydb`
-- `DB_TYPE=mysql` or `postgis`
+- `DB_TYPE=mysql` or `postgres` or `postgis`
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
 - `RESTORE_CONFIG_NAME=""`
 
@@ -125,7 +125,7 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
 - Docker (optional, for containerized deployment)
 - Python 3.9
-- MySQL or PostGIS database
+- MySQL, PostgreSQL or PostGIS database
 
 ### Build using Docker
 
