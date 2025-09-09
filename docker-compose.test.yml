@@ -53,3 +53,34 @@ services:
       POSTGRES_PASSWORD: test_password
     ports:
       - "15433:5432"
+    expose:
+      - 5000
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      - postgis
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379" # Potrebbe essere necessario cambiare se la porta host 6379 è già usata
+
+  nards_backup_redis:
+    build: .
+    environment:
+      DB_HOST: redis
+      DB_PORT: 6379
+      DB_TYPE: redis
+      # DB_USER, DB_PASSWORD, DB_MAINTENANCE_NAME non sono tipicamente usati per Redis con questo setup.
+      BACKUP_DIR: /backups
+      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 5, "name": "redis_backup"}]'
+      # RESTORE_CONFIG_NAME: 'redis_backup' # Abilitare per testare il ripristino all'avvio.
+      # CONTAINER_NAME: "docker-compose-test-yml_redis_1" # Impostare se si vuole che RedisModule usi un nome container specifico per `docker cp`.
+                                                          # Il servizio `nards_backup_redis` deve avere accesso al socket Docker.
+    ports:
+      - "5003:5000" # Porta host diversa per evitare conflitti.
+    volumes:
+      - ./backups:/backups
+      - /var/run/docker.sock:/var/run/docker.sock # Necessario se RedisModule (in esecuzione in questo container) deve eseguire `docker cp`.
+    depends_on:
+      - redis
