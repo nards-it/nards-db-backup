@@ -18,7 +18,7 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 # Flask Backup Application
 
-A Flask application that schedules and manages database backups using cron jobs. It supports both MySQL and PostGIS databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL and PostGIS databases and can restore backups via command-line arguments.
 
 ## Features
 
@@ -37,7 +37,7 @@ Configure the application via environment variables. Create a `.env` file with t
 - `DB_USER=user`
 - `DB_PASSWORD=password`
 - `DB_MAINTENANCE_NAME=mydb`
-- `DB_TYPE=mysql` or `postgis`
+- `DB_TYPE=mysql` or `postgres` or `postgis`
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
 - `RESTORE_CONFIG_NAME=""`
 
@@ -125,7 +125,7 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
 - Docker (optional, for containerized deployment)
 - Python 3.9
-- MySQL or PostGIS database
+- MySQL, PostgreSQL or PostGIS database
 
 ### Build using Docker
 
@@ -146,6 +146,40 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 2. Run the application:
 
    `python app.py`
+
+## Testing
+
+You can run the test suite in two ways, either mirroring the CI pipeline with Docker Compose, or directly from your local virtual environment using pytest (with Docker-managed services).
+
+### CI-like (Docker Compose)
+
+- Run tests in containers (same as GitHub Actions):
+
+  `docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner`
+
+- Tear down (optional if you used `--exit-code-from`, containers stop automatically):
+
+  `docker compose -f docker-compose.test.yml down -v`
+
+### Local venv + pytest
+
+- Requirements:
+  - Docker installed and running
+  - Database CLI tools available on your host PATH:
+    - MySQL: `mysqldump` (from `mariadb-client` or `mysql-client`)
+    - PostgreSQL: `pg_dump`, `pg_restore`, `psql` (from `postgresql-client`)
+  - Python dependencies installed: `pip install -r requirements.txt`
+
+- Run tests from your venv; the test stack is auto-started by pytest (pytest-docker):
+
+  `source venv/bin/activate && pytest -q`
+
+- Notes:
+  - `tests/conftest.py` automatically brings up services from `tests/docker-compose.yml` and exports the needed env vars; no manual setup needed.
+  - If you have an existing container named `mysql` running, you may see a name conflict. Stop it or run:
+
+    `docker compose -f tests/docker-compose.yml down -v`
+
 
 ## License
 
