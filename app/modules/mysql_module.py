@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List
 import subprocess
 import logging
+import os
 
 from app.modules.abstract_module import AbstractModule
 
@@ -20,7 +21,9 @@ class MySQLModule(AbstractModule):
     for listing, backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
+    def __init__(
+        self, host: str, port: str, username: str, password: str, maintenance_db: str
+    ):
         """
         Initializes the MySQLModule with connection details.
 
@@ -47,14 +50,16 @@ class MySQLModule(AbstractModule):
                     port=self._port,
                     user=self._username,
                     password=self._password,
-                    database=self._maintenance_db
+                    database=self._maintenance_db,
                 )
                 logger.info("Successfully connected to MySQL database.")
                 return connection
             except Error as e:
                 logger.error(f"Error connecting to MySQL database: {e}")
-                logger.info(f"Waiting {5*attempt} seconds to connect again to MySQL database")
-                time.sleep(5*attempt)
+                logger.info(
+                    f"Waiting {5 * attempt} seconds to connect again to MySQL database"
+                )
+                time.sleep(5 * attempt)
 
         logger.error("Error connecting to MySQL database, no more attempts.")
 
@@ -72,7 +77,12 @@ class MySQLModule(AbstractModule):
                 cursor.execute("SHOW DATABASES")
                 databases = cursor.fetchall()
                 cursor.close()
-                system_databases = ['information_schema', 'mysql', 'performance_schema', 'sys']
+                system_databases = [
+                    "information_schema",
+                    "mysql",
+                    "performance_schema",
+                    "sys",
+                ]
                 return [db[0] for db in databases if db[0] not in system_databases]
             except Error as e:
                 logger.error(f"Error fetching database list: {e}")
@@ -95,8 +105,14 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"mysqldump --complete-insert -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
-                   f" {destination_file}")
+        ssl_mode_param = ""
+        if os.environ.get("MYSQL_SSL_MODE") == "DISABLED":
+            ssl_mode_param = "--skip-ssl"
+
+        command = (
+            f"mysqldump {ssl_mode_param} --complete-insert -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name} >"
+            f" {destination_file}"
+        )
         try:
             subprocess.run(command, shell=True, check=True, text=True)
             logger.info(f"Backup successful for database {name} to {destination_file}.")
@@ -116,28 +132,43 @@ class MySQLModule(AbstractModule):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        drop_command = (f"mysql -h {self._host} -P {self._port} -u {self._username} -p{self._password}"
-                        f" -e 'DROP DATABASE IF EXISTS {name}; CREATE DATABASE {name};'")
-        restore_command = (f"mysql -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name}"
-                           f" < {source_file}")
+        ssl_mode_param = ""
+        if os.environ.get("MYSQL_SSL_MODE") == "DISABLED":
+            ssl_mode_param = "--skip-ssl"
+
+        drop_command = (
+            f"mysql {ssl_mode_param} -h {self._host} -P {self._port} -u {self._username} -p{self._password}"
+            f" -e 'DROP DATABASE IF EXISTS {name}; CREATE DATABASE {name};'"
+        )
+        restore_command = (
+            f"mysql {ssl_mode_param} -h {self._host} -P {self._port} -u {self._username} -p{self._password} {name}"
+            f" < {source_file}"
+        )
 
         try:
             # Drop and recreate the database
-            subprocess.run(drop_command, shell=True, check=True, text=True, encoding='utf-8')
+            subprocess.run(
+                drop_command, shell=True, check=True, text=True, encoding="utf-8"
+            )
             logger.info(f"Database {name} dropped and recreated successfully.")
 
             # Restore the database from the backup file
-            subprocess.run(restore_command, shell=True, check=True, text=True, encoding='utf-8')
+            subprocess.run(
+                restore_command, shell=True, check=True, text=True, encoding="utf-8"
+            )
             logger.info(f"Restore successful for database {name} from {source_file}.")
             return True
         except subprocess.CalledProcessError as e:
             logger.error(
                 f"Error restoring database {name}: {e}. Command: "
-                f"{drop_command if e.cmd == drop_command else restore_command}")
+                f"{drop_command if e.cmd == drop_command else restore_command}"
+            )
             return False
         except FileNotFoundError:
             logger.error(f"Backup file {source_file} not found.")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error occurred while restoring database {name}: {e}")
+            logger.error(
+                f"Unexpected error occurred while restoring database {name}: {e}"
+            )
             return False

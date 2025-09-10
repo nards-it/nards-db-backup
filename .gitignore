@@ -1,11 +1,41 @@
 # IntelliJ
+# IntelliJ
 .idea/
+
+# Backup directory
 
 # Backup directory
 backups/
 
 # Virtualenv
+
+# Virtualenv
 venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+*.log
+
+# Docker
+docker-compose.override.yml
+*.env
+.dockerignore
+
 .venv/
 
 # Python cache

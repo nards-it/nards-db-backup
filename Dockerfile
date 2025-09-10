@@ -1,9 +1,13 @@
 FROM python:3.10-slim AS builder
 
 # Install compiling dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     mariadb-client \
-    postgresql-client \
+    postgresql-client-14 \
     python3-dev libpq-dev gcc \
     && \
     apt-get clean && \
@@ -28,13 +32,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 FROM python:3.10-slim AS prod
 
 # Install dumb-init
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg ca-certificates curl && \
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     curl \
     dumb-init \
     mariadb-client \
-    postgresql-client \
+    postgresql-client-14 \
     libpq-dev \
-    docker.io \
+    docker-compose \
     && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

@@ -1,24 +1,56 @@
-version: '3.8'
-
 services:
+  test-runner:
+    build: .
+    command: pytest -q
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/app
+    environment:
+      DB_HOST_MYSQL: mysql
+      DB_PORT_MYSQL: "3306"
+      DB_USER_MYSQL: test_user
+      DB_PASSWORD_MYSQL: test_password
+      DB_NAME_MYSQL: test_database
+      DB_HOST_POSTGRES: postgres
+      DB_PORT_POSTGRES: "5432"
+      DB_USER_POSTGRES: test_user
+      DB_PASSWORD_POSTGRES: test_password
+      DB_NAME_POSTGRES: test_database
+      DB_HOST_POSTGIS: postgis
+      DB_PORT_POSTGIS: "5432"
+      DB_USER_POSTGIS: test_user
+      DB_PASSWORD_POSTGIS: test_password
+      DB_NAME_POSTGIS: test_database
+      MYSQL_SSL_MODE: "DISABLED"
+      PG_RESTORE_CLEAN: "true"
+
   mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: testuser
-      MYSQL_USER: testuser
-      MYSQL_PASSWORD: testpassword
+      MYSQL_DATABASE: test_database
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
     ports:
-      - "3306:3306"
-    volumes:
-      - ./tests/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql
+       - "13306:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "15432:5432"
 
   postgis:
     image: postgis/postgis:14-3.5
     environment:
-      POSTGRES_DB: testuser
-      POSTGRES_USER: testuser
-      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
     ports:
       - "5432:5432"
     volumes:
@@ -61,28 +93,3 @@ services:
       - ./backups:/backups
     depends_on:
       - postgis
-
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379" # Potrebbe essere necessario cambiare se la porta host 6379 è già usata
-
-  nards_backup_redis:
-    build: .
-    environment:
-      DB_HOST: redis
-      DB_PORT: 6379
-      DB_TYPE: redis
-      # DB_USER, DB_PASSWORD, DB_MAINTENANCE_NAME non sono tipicamente usati per Redis con questo setup.
-      BACKUP_DIR: /backups
-      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 5, "name": "redis_backup"}]'
-      # RESTORE_CONFIG_NAME: 'redis_backup' # Abilitare per testare il ripristino all'avvio.
-      # CONTAINER_NAME: "docker-compose-test-yml_redis_1" # Impostare se si vuole che RedisModule usi un nome container specifico per `docker cp`.
-                                                          # Il servizio `nards_backup_redis` deve avere accesso al socket Docker.
-    ports:
-      - "5003:5000" # Porta host diversa per evitare conflitti.
-    volumes:
-      - ./backups:/backups
-      - /var/run/docker.sock:/var/run/docker.sock # Necessario se RedisModule (in esecuzione in questo container) deve eseguire `docker cp`.
-    depends_on:
-      - redis
