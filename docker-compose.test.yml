@@ -1,66 +1,77 @@
-version: '3.8'
-
 services:
+  test-runner:
+    build: .
+    command: pytest -q
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/app
+      - redis-data:/data
+    environment:
+      DB_HOST_MYSQL: mysql
+      DB_PORT_MYSQL: "3306"
+      DB_USER_MYSQL: test_user
+      DB_PASSWORD_MYSQL: test_password
+      DB_NAME_MYSQL: test_database
+      DB_HOST_POSTGRES: postgres
+      DB_PORT_POSTGRES: "5432"
+      DB_USER_POSTGRES: test_user
+      DB_PASSWORD_POSTGRES: test_password
+      DB_NAME_POSTGRES: test_database
+      DB_HOST_POSTGIS: postgis
+      DB_PORT_POSTGIS: "5432"
+      DB_USER_POSTGIS: test_user
+      DB_PASSWORD_POSTGIS: test_password
+      DB_NAME_POSTGIS: test_database
+      DB_HOST_REDIS: redis
+      DB_PORT_REDIS: "6379"
+      DB_PASSWORD_REDIS: ""
+      REDIS_RDB_HOST_DIR: "/data"
+      MYSQL_SSL_MODE: "DISABLED"
+      PG_RESTORE_CLEAN: "true"
+
   mysql:
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: testuser
-      MYSQL_USER: testuser
-      MYSQL_PASSWORD: testpassword
+      MYSQL_DATABASE: test_database
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
     ports:
-      - "3306:3306"
-    volumes:
-      - ./tests/init_mysql.sql:/docker-entrypoint-initdb.d/init_mysql.sql
+       - "13306:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "15432:5432"
 
   postgis:
     image: postgis/postgis:14-3.5
     environment:
-      POSTGRES_DB: testuser
-      POSTGRES_USER: testuser
-      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
     ports:
-      - "5432:5432"
-    volumes:
-      - ./tests/init_postgis.sql:/docker-entrypoint-initdb.d/init_postgis.sql
+      - "15433:5432"
 
-  nards_backup_mysql:
-    build: .
-    environment:
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_USER: testuser
-      DB_PASSWORD: testpassword
-      DB_TYPE: mysql
-      BACKUP_DIR: /backups
-      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 7, "name": "mysql_backup"}]'
-      RESTORE_CONFIG_NAME: 'mysql_backup'
-    ports:
-      - "5001:5000"
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    # Run redis in a simple restart loop so that SHUTDOWN during tests
+    # does not cause the container to exit and abort the compose run.
+    command: ["sh", "-lc", "while true; do redis-server; echo 'redis exited'; sleep 0.2; done"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
     volumes:
-      - ./backups:/backups
-    depends_on:
-      - mysql
-
-  nards_backup_postgis:
-    build: .
-    environment:
-      DB_HOST: postgis
-      DB_PORT: 5432
-      DB_USER: testuser
-      DB_PASSWORD: testpassword
-      DB_TYPE: postgis
-      BACKUP_DIR: /backups
-      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
-      RESTORE_CONFIG_NAME: 'every'
-    ports:
-      - "5002:5000"
-    expose:
-      - 5000
-    volumes:
-      - ./backups:/backups
-    depends_on:
-      - postgis
+      - redis-data:/data
 
   mongo:
     image: mongo:6.0
@@ -79,22 +90,5 @@ services:
       retries: 10
       start_period: 30s
 
-  nards_backup_mongo:
-    build: .
-    environment:
-      DB_HOST: mongo
-      DB_PORT: 27017
-      DB_USER: testuser
-      DB_PASSWORD: testpassword
-      DB_MAINTENANCE_NAME: admin
-      DB_TYPE: mongodb
-      BACKUP_DIR: /backups
-      CRON_CONFIGS: '[{"cron": "* * * * *", "retention_max": 5, "name": "mongo_backup"}]'
-      RESTORE_CONFIG_NAME: 'mongo_backup'
-    ports:
-      - "5003:5000"
-    volumes:
-      - ./backups_mongo:/backups
-    depends_on:
-      mongo:
-        condition: service_healthy
+volumes:
+  redis-data:

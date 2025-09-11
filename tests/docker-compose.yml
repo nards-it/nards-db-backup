@@ -1,5 +1,6 @@
 services:
   mysql:
+    container_name: mysql
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
@@ -13,6 +14,19 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - ./redis-data:/data
 
   postgres:
     image: postgres:14

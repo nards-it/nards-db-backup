@@ -10,25 +10,20 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     # Database configuration
-    DB_TYPE = os.getenv('DB_TYPE', 'mysql')  # 'mysql', 'postgis', 'postgres' or 'mongodb'
-    DB_HOST = os.getenv('DB_HOST', 'localhost')
-    if DB_TYPE == 'mysql':
-        port_default = 3306
-    elif DB_TYPE == 'mongodb':
-        port_default = 27017
-    else:  # postgres, postgis
-        port_default = 5432
-    DB_PORT = os.getenv('DB_PORT', port_default)
-    DB_USER = os.getenv('DB_USER', 'user')
-    DB_PASSWORD = os.getenv('DB_PASSWORD', 'password')
-    DB_MAINTENANCE_NAME = os.getenv('DB_MAINTENANCE_NAME', DB_USER)
+    DB_TYPE = os.getenv("DB_TYPE", "mysql")  # Supported: 'mysql', 'postgres', 'postgis', redis and mongoDb
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    port_default = 3306 if DB_TYPE == "mysql" else 5432
+    DB_PORT = os.getenv("DB_PORT", port_default)
+    DB_USER = os.getenv("DB_USER", "user")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "password")
+    DB_MAINTENANCE_NAME = os.getenv("DB_MAINTENANCE_NAME", DB_USER)
 
     # Backup configurations
-    CRON_CONFIGS = os.getenv('CRON_CONFIGS', '0 0 * * *')
-    BACKUP_DIR = Path('/backups')
+    CRON_CONFIGS = os.getenv("CRON_CONFIGS", "0 0 * * *")
+    BACKUP_DIR = Path("/backups")
 
     # Restore settings
-    RESTORE_CONFIG_NAME = os.getenv('RESTORE_CONFIG_NAME', '')
+    RESTORE_CONFIG_NAME = os.getenv("RESTORE_CONFIG_NAME", "")
 
     # Parse CRON_CONFIGS from environment variable
     try:
@@ -36,14 +31,16 @@ class Config:
         if not isinstance(cron_configs, list):
             raise ValueError("CRON_CONFIGS must be a list of dictionaries.")
         for config in cron_configs:
-            if 'cron' not in config:
+            if "cron" not in config:
                 raise ValueError("Each configuration must contain a 'cron' key.")
-            if len(cron_configs) > 1 and 'name' not in config:
-                raise ValueError("Each configuration must contain a 'name' key if there are multiple configurations.")
+            if len(cron_configs) > 1 and "name" not in config:
+                raise ValueError(
+                    "Each configuration must contain a 'name' key if there are multiple configurations."
+                )
             # Set default value for retention_max if not provided
-            config.setdefault('retention_max', 90)
-            if 'name' not in config:
-                config['name'] = 'default'
+            config.setdefault("retention_max", 90)
+            if "name" not in config:
+                config["name"] = "default"
         CRON_CONFIGS = cron_configs
         logger.info(f"Parsed CRON_CONFIGS: {CRON_CONFIGS}")
     except json.JSONDecodeError:

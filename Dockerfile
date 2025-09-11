@@ -1,9 +1,13 @@
 FROM python:3.10-slim AS builder
 
 # Install compiling dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     mariadb-client \
-    postgresql-client \
+    postgresql-client-14 \
     python3-dev libpq-dev gcc \
     && \
     apt-get clean && \
@@ -29,6 +33,10 @@ FROM python:3.10-slim AS prod
 
 # Install runtime dependencies
 RUN apt-get update && \
+    apt-get install -y --no-install-recommends gnupg ca-certificates curl && \
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt trixie-pgdg main" > /etc/apt/sources.list.d/pgdg.list' && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
+    apt-get update && \
     apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
     curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
     gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor && \
@@ -38,9 +46,11 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     dumb-init \
     mariadb-client \
-    postgresql-client \
+    postgresql-client-14 \
     mongodb-database-tools \
-    libpq-dev && \
+    libpq-dev \
+    docker-compose \
+    && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
