@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import List
 import subprocess
 import logging
-import json
 import os
 
 from app.modules.abstract_module import AbstractModule
@@ -308,7 +307,7 @@ class PostGISModule(AbstractModule):
                     )
                 except subprocess.CalledProcessError as e:
                     logger.error(
-                        "Failed to enable PostGIS extension as a fallback before restore."
+                        f"Failed to enable PostGIS extension as a fallback before restore: {e}"
                     )
                     return False
 
