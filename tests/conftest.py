@@ -81,7 +81,9 @@ def ensure_services_for_local(request):
         root = str(request.config.rootdir)
     except Exception:
         root = os.getcwd()
-    os.environ.setdefault("REDIS_RDB_HOST_DIR", os.path.join(root, "tests", "redis-data"))
+    os.environ.setdefault(
+        "REDIS_RDB_HOST_DIR", os.path.join(root, "tests", "redis-data")
+    )
 
     # Simple TCP readiness checks
     def _tcp_ready(host: str, port: int) -> bool:

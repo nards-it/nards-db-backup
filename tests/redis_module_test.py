@@ -13,7 +13,9 @@ from app.modules.redis_module import RedisModule
 
 def _check_redis_connection(host, port, password=None):
     try:
-        r = redis.Redis(host=host, port=int(port), password=password, socket_connect_timeout=1)
+        r = redis.Redis(
+            host=host, port=int(port), password=password, socket_connect_timeout=1
+        )
         r.ping()
         return True
     except Exception:
@@ -48,7 +50,12 @@ def redis_env(pytestconfig):
 
 @pytest.fixture
 def redis_module(redis_env):
-    return RedisModule(host=redis_env["host"], port=str(redis_env["port"]), password=redis_env["password"], container_name=None)
+    return RedisModule(
+        host=redis_env["host"],
+        port=str(redis_env["port"]),
+        password=redis_env["password"],
+        container_name=None,
+    )
 
 
 def test_list_all_databases(redis_module, redis_env):
@@ -100,11 +107,19 @@ def test_backup_and_restore_database(pytestconfig, redis_module, redis_env):
             pass
 
         # Wait for Redis to come back
-        host, port, password = redis_env["host"], redis_env["port"], redis_env["password"]
+        host, port, password = (
+            redis_env["host"],
+            redis_env["port"],
+            redis_env["password"],
+        )
         deadline = time.time() + 60
-        while time.time() < deadline and not _check_redis_connection(host, port, password):
+        while time.time() < deadline and not _check_redis_connection(
+            host, port, password
+        ):
             time.sleep(0.5)
-        assert _check_redis_connection(host, port, password), "Redis did not restart in time"
+        assert _check_redis_connection(host, port, password), (
+            "Redis did not restart in time"
+        )
 
         reconnected = redis.Redis(host=host, port=int(port), password=password)
         time.sleep(0.5)

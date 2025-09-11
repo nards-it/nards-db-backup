@@ -17,7 +17,15 @@ class RedisModule(AbstractModule):
     Redis backups are typically RDB files.
     """
 
-    def __init__(self, host: str, port: str, username: str = None, password: str = None, maintenance_db: str = None, container_name: str = None):
+    def __init__(
+        self,
+        host: str,
+        port: str,
+        username: str = None,
+        password: str = None,
+        maintenance_db: str = None,
+        container_name: str = None,
+    ):
         """
         Initializes the Redis module.
 
@@ -33,8 +41,10 @@ class RedisModule(AbstractModule):
         super().__init__(host, port, username, password, maintenance_db)
         # maintenance_db is not strictly applicable to Redis in the same way as SQL.
         # Username is also less common for Redis connection strings directly in redis-py prior to 6.0 if not using ACLs.
-        self.redis_client = redis.Redis(host=self.host, port=int(self.port), password=self.password, db=0) # Assuming db 0 for operations
-        self.container_name = container_name # Used for docker cp operations
+        self.redis_client = redis.Redis(
+            host=self.host, port=int(self.port), password=self.password, db=0
+        )  # Assuming db 0 for operations
+        self.container_name = container_name  # Used for docker cp operations
 
     def _get_rdb_config(self) -> tuple[Path, str]:
         """
@@ -43,15 +53,21 @@ class RedisModule(AbstractModule):
             tuple[Path, str]: (Path(directory), filename)
         """
         try:
-            rdb_directory_str = self.redis_client.config_get('dir').get('dir')
-            rdb_filename_str = self.redis_client.config_get('dbfilename').get('dbfilename')
+            rdb_directory_str = self.redis_client.config_get("dir").get("dir")
+            rdb_filename_str = self.redis_client.config_get("dbfilename").get(
+                "dbfilename"
+            )
             if not rdb_directory_str or not rdb_filename_str:
-                logger.warning("Could not retrieve RDB dir/filename from Redis config. Falling back to defaults.")
-                return Path("/data"), "dump.rdb" # Common defaults
+                logger.warning(
+                    "Could not retrieve RDB dir/filename from Redis config. Falling back to defaults."
+                )
+                return Path("/data"), "dump.rdb"  # Common defaults
             return Path(rdb_directory_str), rdb_filename_str
         except redis.exceptions.RedisError as e:
-            logger.error(f"Error getting RDB config from Redis: {e}. Falling back to defaults.")
-            return Path("/data"), "dump.rdb" # Fallback
+            logger.error(
+                f"Error getting RDB config from Redis: {e}. Falling back to defaults."
+            )
+            return Path("/data"), "dump.rdb"  # Fallback
 
     def _find_container_by_mapped_port(self, host_port: int) -> str | None:
         """
@@ -129,6 +145,7 @@ class RedisModule(AbstractModule):
             rdb_dir_internal, rdb_filename_internal = self._get_rdb_config()
             # Paths: host-visible (for direct copy) vs container path (for docker cp fallback)
             import os as _os
+
             host_dir_override = _os.environ.get("REDIS_RDB_HOST_DIR")
             rdb_path_host = (
                 Path(host_dir_override) / rdb_filename_internal
@@ -138,26 +155,45 @@ class RedisModule(AbstractModule):
             rdb_path_container = rdb_dir_internal / rdb_filename_internal
 
             if self.container_name:
-                logger.info(f"Attempting to copy RDB file from container '{self.container_name}:{rdb_path_container}' to host '{destination_file}'")
+                logger.info(
+                    f"Attempting to copy RDB file from container '{self.container_name}:{rdb_path_container}' to host '{destination_file}'"
+                )
                 try:
                     # It's better to ensure the file exists in container first, but that's harder without `docker exec`
                     # We assume SAVE worked and the file is at the configured path inside the container.
-                    copy_command = ["docker", "cp", f"{self.container_name}:{rdb_path_container}", str(destination_file)]
-                    process = subprocess.run(copy_command, capture_output=True, text=True, check=True)
-                    logger.info(f"Successfully copied RDB file from container. stdout: {process.stdout}")
+                    copy_command = [
+                        "docker",
+                        "cp",
+                        f"{self.container_name}:{rdb_path_container}",
+                        str(destination_file),
+                    ]
+                    process = subprocess.run(
+                        copy_command, capture_output=True, text=True, check=True
+                    )
+                    logger.info(
+                        f"Successfully copied RDB file from container. stdout: {process.stdout}"
+                    )
                 except subprocess.CalledProcessError as e:
-                    logger.error(f"Failed to copy RDB file from container: {e}. stderr: {e.stderr}, stdout: {e.stdout}")
+                    logger.error(
+                        f"Failed to copy RDB file from container: {e}. stderr: {e.stderr}, stdout: {e.stdout}"
+                    )
                     return False
                 except FileNotFoundError:
-                    logger.error("`docker` command not found. Cannot copy RDB file from container.")
+                    logger.error(
+                        "`docker` command not found. Cannot copy RDB file from container."
+                    )
                     return False
             else:
                 # Logic for non-containerized Redis (or if container_name is not provided)
                 # This assumes Redis is reachable on host and we have direct access to its RDB file path.
-                logger.info(f"Copying RDB file from local Redis path '{rdb_path_host}' to '{destination_file}'...")
+                logger.info(
+                    f"Copying RDB file from local Redis path '{rdb_path_host}' to '{destination_file}'..."
+                )
                 try:
                     if not rdb_path_host.exists():
-                        logger.error(f"Local RDB file not found at '{rdb_path_host}'. Backup failed.")
+                        logger.error(
+                            f"Local RDB file not found at '{rdb_path_host}'. Backup failed."
+                        )
                         return False
                     shutil.copy(str(rdb_path_host), str(destination_file))
                 except PermissionError:
@@ -167,7 +203,9 @@ class RedisModule(AbstractModule):
                     )
                     detected = self._find_container_by_mapped_port(int(self.port))
                     if not detected:
-                        logger.error("Unable to detect Redis container for docker cp fallback.")
+                        logger.error(
+                            "Unable to detect Redis container for docker cp fallback."
+                        )
                         return False
                     try:
                         copy_command = [
@@ -176,16 +214,26 @@ class RedisModule(AbstractModule):
                             f"{detected}:{rdb_path_container}",
                             str(destination_file),
                         ]
-                        process = subprocess.run(copy_command, capture_output=True, text=True, check=True)
-                        logger.info(f"Successfully copied RDB file from detected container '{detected}'. stdout: {process.stdout}")
+                        process = subprocess.run(
+                            copy_command, capture_output=True, text=True, check=True
+                        )
+                        logger.info(
+                            f"Successfully copied RDB file from detected container '{detected}'. stdout: {process.stdout}"
+                        )
                     except subprocess.CalledProcessError as e:
-                        logger.error(f"Failed docker cp from detected container '{detected}': {e}. stderr: {e.stderr}, stdout: {e.stdout}")
+                        logger.error(
+                            f"Failed docker cp from detected container '{detected}': {e}. stderr: {e.stderr}, stdout: {e.stdout}"
+                        )
                         return False
                     except FileNotFoundError:
-                        logger.error("`docker` command not found. Cannot perform docker cp fallback.")
+                        logger.error(
+                            "`docker` command not found. Cannot perform docker cp fallback."
+                        )
                         return False
 
-            logger.info(f"Redis backup for '{name}' completed successfully to '{destination_file}'.")
+            logger.info(
+                f"Redis backup for '{name}' completed successfully to '{destination_file}'."
+            )
             return True
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error during backup: {e}")
@@ -214,6 +262,7 @@ class RedisModule(AbstractModule):
         try:
             rdb_dir_internal, rdb_filename_internal = self._get_rdb_config()
             import os as _os
+
             host_dir_override = _os.environ.get("REDIS_RDB_HOST_DIR")
             rdb_path_host = (
                 Path(host_dir_override) / rdb_filename_internal
@@ -224,26 +273,45 @@ class RedisModule(AbstractModule):
 
             dest_desc = None
             if self.container_name:
-                logger.info(f"Attempting to copy backup file '{source_file}' to container '{self.container_name}:{rdb_path_container}'")
+                logger.info(
+                    f"Attempting to copy backup file '{source_file}' to container '{self.container_name}:{rdb_path_container}'"
+                )
                 try:
                     # Ensure parent directory exists in container (docker cp doesn't create it by default for the file path)
                     # This might require `docker exec <container> mkdir -p <dir>` if not already present.
                     # For simplicity, we assume the directory configured in Redis exists.
-                    copy_command = ["docker", "cp", str(source_file), f"{self.container_name}:{rdb_path_container}"]
-                    process = subprocess.run(copy_command, capture_output=True, text=True, check=True)
-                    logger.info(f"Successfully copied RDB file to container. stdout: {process.stdout}")
+                    copy_command = [
+                        "docker",
+                        "cp",
+                        str(source_file),
+                        f"{self.container_name}:{rdb_path_container}",
+                    ]
+                    process = subprocess.run(
+                        copy_command, capture_output=True, text=True, check=True
+                    )
+                    logger.info(
+                        f"Successfully copied RDB file to container. stdout: {process.stdout}"
+                    )
                     dest_desc = str(rdb_path_container)
                 except subprocess.CalledProcessError as e:
-                    logger.error(f"Failed to copy RDB file to container: {e}. stderr: {e.stderr}, stdout: {e.stdout}")
+                    logger.error(
+                        f"Failed to copy RDB file to container: {e}. stderr: {e.stderr}, stdout: {e.stdout}"
+                    )
                     return False
                 except FileNotFoundError:
-                    logger.error("`docker` command not found. Cannot copy RDB file to container.")
+                    logger.error(
+                        "`docker` command not found. Cannot copy RDB file to container."
+                    )
                     return False
             else:
                 # Logic for non-containerized Redis
-                logger.info(f"Copying backup file '{source_file}' to local Redis RDB path '{rdb_path_host}'...")
+                logger.info(
+                    f"Copying backup file '{source_file}' to local Redis RDB path '{rdb_path_host}'..."
+                )
                 try:
-                    rdb_path_host.parent.mkdir(parents=True, exist_ok=True) # Ensure local dir exists
+                    rdb_path_host.parent.mkdir(
+                        parents=True, exist_ok=True
+                    )  # Ensure local dir exists
                     shutil.copy(str(source_file), str(rdb_path_host))
                     dest_desc = str(rdb_path_host)
                 except PermissionError:
@@ -253,7 +321,9 @@ class RedisModule(AbstractModule):
                     )
                     detected = self._find_container_by_mapped_port(int(self.port))
                     if not detected:
-                        logger.error("Unable to detect Redis container for docker cp fallback.")
+                        logger.error(
+                            "Unable to detect Redis container for docker cp fallback."
+                        )
                         return False
                     try:
                         copy_command = [
@@ -262,20 +332,32 @@ class RedisModule(AbstractModule):
                             str(source_file),
                             f"{detected}:{rdb_path_container}",
                         ]
-                        process = subprocess.run(copy_command, capture_output=True, text=True, check=True)
-                        logger.info(f"Successfully copied RDB file to detected container '{detected}'. stdout: {process.stdout}")
+                        process = subprocess.run(
+                            copy_command, capture_output=True, text=True, check=True
+                        )
+                        logger.info(
+                            f"Successfully copied RDB file to detected container '{detected}'. stdout: {process.stdout}"
+                        )
                         dest_desc = str(rdb_path_container)
                     except subprocess.CalledProcessError as e:
-                        logger.error(f"Failed docker cp to detected container '{detected}': {e}. stderr: {e.stderr}, stdout: {e.stdout}")
+                        logger.error(
+                            f"Failed docker cp to detected container '{detected}': {e}. stderr: {e.stderr}, stdout: {e.stdout}"
+                        )
                         return False
                     except FileNotFoundError:
-                        logger.error("`docker` command not found. Cannot perform docker cp fallback.")
+                        logger.error(
+                            "`docker` command not found. Cannot perform docker cp fallback."
+                        )
                         return False
 
             if dest_desc is None:
                 dest_desc = "<unknown>"
-            logger.info(f"Redis RDB file '{source_file}' copied to target location '{dest_desc}'.")
-            logger.info("A Redis server restart is required to load the restored RDB file.")
+            logger.info(
+                f"Redis RDB file '{source_file}' copied to target location '{dest_desc}'."
+            )
+            logger.info(
+                "A Redis server restart is required to load the restored RDB file."
+            )
             # The module itself won't try to reload or restart Redis. This should be handled by the caller.
             return True
         except redis.exceptions.RedisError as e:

@@ -33,4 +33,3 @@ def test_app_import_selects_redis_module(monkeypatch, pytestconfig):
     app_mod = _import_app_py("app_main_redis", pytestconfig.rootdir)
 
     assert isinstance(app_mod.db_module, RedisModule)
-
