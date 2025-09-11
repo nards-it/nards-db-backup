@@ -12,6 +12,8 @@ services:
       DB_USER_MYSQL: test_user
       DB_PASSWORD_MYSQL: test_password
       DB_NAME_MYSQL: test_database
+      DB_HOST_GRAPHDB: graphdb
+      DB_PORT_GRAPHDB: "7200"
       DB_HOST_POSTGRES: postgres
       DB_PORT_POSTGRES: "5432"
       DB_USER_POSTGRES: test_user
@@ -95,14 +97,14 @@ services:
       - redis-data:/data
   
   graphdb:
-    image: ontotext/graphdb:11.0.0
+    image: dhlabbasel/graphdb-free:latest
     container_name: graphdb_service_for_e2e_tests
     ports:
       - "7200:7200"
     volumes:
       - graphdb_e2e_data:/opt/graphdb/home
     environment:
-      GDB_JAVA_OPTS: "-Xmx1g -Xms1g"
+      GDB_HEAP_SIZE: "2g"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail http://localhost:7200/rest/repositories || exit 1"]
       interval: 20s
@@ -128,3 +130,4 @@ services:
 
 volumes:
   redis-data:
+  graphdb_e2e_data:

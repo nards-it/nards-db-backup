@@ -18,8 +18,7 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 # Flask Backup Application
 
-A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL, MongoDB, PostGIS and GraphDB databases and can restore backups via command-line arguments.
-A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostGIS, PostgreSQL, MongoDB, Redis , and GraphDB databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL, PostGIS, MongoDB, Redis, and GraphDB, and can restore backups via command-line arguments.
 
 ## Features
 
@@ -35,14 +34,20 @@ A Flask application that schedules and manages database backups using cron jobs.
 Configure the application via environment variables. Create a `.env` file with the following variables:
 
 - `DB_HOST=localhost`
-- `DB_PORT=5432` # (e.g., MySQL: 3306, Postgres/PostGIS: 5432, MongoDB: 27017)
+- `DB_PORT=5432` # (e.g., MySQL: 3306, Postgres/PostGIS: 5432, MongoDB: 27017, GraphDB: 7200)
 - `DB_USER=user`
 - `DB_PASSWORD=password`
 - `DB_MAINTENANCE_NAME=mydb` # For MongoDB, this is often 'admin' if using auth # For SQL databases; less relevant for Redis
-- `DB_TYPE=mysql`, `postgres`, `postgis`, `postgres`, or `redis` or `postgres` or `mongodb`, or `graphdb`
-  - (When `DB_TYPE=graphdb`, `DB_PORT` is typically `7200`. `DB_USER` and `DB_PASSWORD` can often be left empty for default GraphDB Free installations if security is not enabled.)
+- `DB_TYPE=mysql|postgres|postgis|redis|mongodb|graphdb`
+  - GraphDB: `DB_PORT` is typically `7200`. `DB_USER` and `DB_PASSWORD` can often be left empty for GraphDB Free if security is disabled.
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
 - `RESTORE_CONFIG_NAME=""`
+
+### GraphDB Notes
+
+- Uses GraphDB recovery endpoints when available (Enterprise). With GraphDB Free, it transparently falls back to RDF export/import (N‑Triples) for backup/restore.
+- GraphDB data lives in repositories. The scheduler backs up every repository returned by `GET /rest/repositories`.
+- Default port is `7200`. Provide `DB_USER`/`DB_PASSWORD` only if security is enabled in your GraphDB instance.
 
 ### CRON_CONFIGS
 
@@ -134,7 +139,7 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
 - Docker (optional, for containerized deployment)
 - Python 3.9 (or compatible, e.g., 3.10 as per Dockerfile)
-- MySQL, PostgreSQL, PostGIS, PostgreSQL, Redis, MongoDB, or GraphDB database
+- MySQL, PostgreSQL, PostGIS, Redis, MongoDB, or GraphDB database
 
 ### Build using Docker
 
@@ -144,7 +149,7 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
 2. Run the Docker container:
 
-   `docker run -p 5000:5000 --env-file .env flask_backup_app`
+  `docker run -p 5000:5000 --env-file .env flask_backup_app`
 
 ### Build without Docker
 
@@ -173,6 +178,8 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
 - Redis note: in the test compose, the `redis` service runs in a tiny restart loop so that the test's `SHUTDOWN` does not terminate the container and abort the Compose run. This applies only to the test compose.
   
 - MongoDB note: the service is named `mongodb` in `docker-compose.test.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
+
+- GraphDB note: the test stack includes a `graphdb` service (GraphDB Free). The GraphDB module prefers enterprise recovery endpoints when available; with GraphDB Free, it transparently falls back to RDF export/import (N‑Triples) for backup/restore. Port defaults to `7200`.
 
 ### Local venv + pytest
 

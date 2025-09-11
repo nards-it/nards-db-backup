@@ -90,8 +90,8 @@ services:
 
 
   graphdb:
-    image: ontotext/graphdb:11.0.0
+    image: dhlabbasel/graphdb-free:latest
     ports:
       - "0:7200"
     environment:
-      GDB_JAVA_OPTS: "-Xmx1g -Xms1g"
+      GDB_HEAP_SIZE: "2g"

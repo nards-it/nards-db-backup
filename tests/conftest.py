@@ -51,6 +51,7 @@ def ensure_services_for_local(request):
     postgis_port = docker_services.port_for("postgis", 5432)
     redis_port = docker_services.port_for("redis", 6379)
     mongodb_port = docker_services.port_for("mongodb", 27017)
+    graphdb_port = docker_services.port_for("graphdb", 7200)
 
     # Export env vars consumed by tests
     os.environ.setdefault("DB_HOST_MYSQL", "127.0.0.1")
@@ -94,6 +95,10 @@ def ensure_services_for_local(request):
     os.environ.setdefault("DB_PASSWORD_MONGODB", "testpassword")
     os.environ.setdefault("DB_NAME_MONGODB", "admin")
 
+    # GraphDB env for tests
+    os.environ.setdefault("DB_HOST_GRAPHDB", "127.0.0.1")
+    os.environ.setdefault("DB_PORT_GRAPHDB", str(graphdb_port))
+
     # Simple TCP readiness checks
     def _tcp_ready(host: str, port: int) -> bool:
         with socket.socket() as s:
@@ -114,6 +119,9 @@ def ensure_services_for_local(request):
     )
     docker_services.wait_until_responsive(
         timeout=150, pause=2, check=lambda: _tcp_ready("127.0.0.1", mongodb_port)
+    )
+    docker_services.wait_until_responsive(
+        timeout=150, pause=2, check=lambda: _tcp_ready("127.0.0.1", graphdb_port)
     )
 
     # Yield to tests; docker_services handles teardown automatically

@@ -12,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 class GraphDBModule(AbstractModule):
     """
-    Adapter REST per Ontotext GraphDB.
+    REST adapter for Ontotext GraphDB.
 
-    End-points usati (≥ 9.4):
-      • GET  /rest/repositories
-      • POST /rest/recovery/backup/{id}
-      • GET  /rest/recovery/download/{file}
-      • POST /rest/recovery/restore/{id}
+    Endpoints used (GraphDB ≥ 9.4):
+      - GET  /rest/repositories
+      - POST /rest/recovery/backup/{id}
+      - GET  /rest/recovery/download/{file}
+      - POST /rest/recovery/restore/{id}
     """
 
     def __init__(
@@ -46,7 +46,7 @@ class GraphDBModule(AbstractModule):
         self._auth = HTTPBasicAuth(username, password) if username and password else None
         self._timeout = timeout
 
-    #helper HTTP
+    # HTTP helpers
     def _get(self, path: str, **kw) -> requests.Response:
         url = f"{self._base}{path}"
         r = requests.get(url, auth=self._auth, timeout=self._timeout, **kw)
@@ -59,7 +59,7 @@ class GraphDBModule(AbstractModule):
         r.raise_for_status()
         return r
 
-    #public API
+    # Public API
     def list_all_databases(self) -> List[str]:
         """
         Lists all repository IDs present on the GraphDB server.
@@ -88,25 +88,62 @@ class GraphDBModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
+        logger.info(f"Starting backup for GraphDB repository '{name}'...")
         try:
-            logger.info(f"Starting backup for GraphDB repository '{name}'...")
+            # Preferred (Enterprise) recovery API
             r = self._post(f"/rest/recovery/backup/{name}")
             backup_file_name_on_server = r.text.strip().strip('"')
-            logger.info(f"Backup process for '{name}' initiated on server, server-side backup file: '{backup_file_name_on_server}'. Downloading...")
+            logger.info(
+                f"Backup process for '{name}' initiated on server, server-side backup file: '{backup_file_name_on_server}'. Downloading..."
+            )
 
             destination_file.parent.mkdir(parents=True, exist_ok=True)
-            with self._get(f"/rest/recovery/download/{backup_file_name_on_server}", stream=True) as download_stream:
+            with self._get(
+                f"/rest/recovery/download/{backup_file_name_on_server}", stream=True
+            ) as download_stream:
                 with destination_file.open("wb") as f_out:
-                    for chunk in download_stream.iter_content(chunk_size=8192): # Adjusted chunk_size
+                    for chunk in download_stream.iter_content(chunk_size=8192):
                         f_out.write(chunk)
 
-            logger.info(f"Backup for repository '{name}' successfully saved to {destination_file}")
+            logger.info(
+                f"Backup for repository '{name}' successfully saved to {destination_file}"
+            )
             return True
-        except requests.exceptions.RequestException as exc:
-            logger.error(f"GraphDB backup for repository '{name}' failed during HTTP operation: {exc}")
+        except requests.exceptions.HTTPError as exc:
+            status = getattr(exc.response, "status_code", None)
+            # Fallback for GraphDB Free/community without recovery endpoints
+            if status in (404, 405):
+                try:
+                    logger.info(
+                        f"Recovery API not available (status {status}). Falling back to RDF export for '{name}'."
+                    )
+                    destination_file.parent.mkdir(parents=True, exist_ok=True)
+                    # Export all statements as N-Triples for broad compatibility
+                    with self._get(
+                        f"/repositories/{name}/statements",
+                        headers={"Accept": "application/n-triples"},
+                        stream=True,
+                    ) as resp:
+                        with destination_file.open("wb") as f_out:
+                            for chunk in resp.iter_content(chunk_size=8192):
+                                f_out.write(chunk)
+                    logger.info(
+                        f"RDF export backup for repository '{name}' saved to {destination_file}"
+                    )
+                    return True
+                except requests.exceptions.RequestException as exc2:
+                    logger.error(
+                        f"GraphDB RDF export backup failed for '{name}': {exc2}"
+                    )
+                    return False
+            logger.error(
+                f"GraphDB backup for repository '{name}' failed during HTTP operation: {exc}"
+            )
             return False
         except Exception as exc:
-            logger.error(f"An unexpected error occurred during GraphDB backup for '{name}': {exc}")
+            logger.error(
+                f"An unexpected error occurred during GraphDB backup for '{name}': {exc}"
+            )
             return False
 
     def restore_database(self, name: str, source_file: Path) -> bool:
@@ -124,16 +161,45 @@ class GraphDBModule(AbstractModule):
             logger.error(f"Backup file {source_file} does not exist for GraphDB restore.")
             return False
 
+        logger.info(
+            f"Starting restore for GraphDB repository '{name}' from file {source_file}..."
+        )
         try:
-            logger.info(f"Starting restore for GraphDB repository '{name}' from file {source_file}...")
+            # Preferred (Enterprise) recovery API
             with source_file.open("rb") as f_in:
                 files_payload = {"file": (source_file.name, f_in, "application/zip")}
                 self._post(f"/rest/recovery/restore/{name}", files=files_payload)
             logger.info(f"Repository '{name}' successfully restored from {source_file}")
             return True
-        except requests.exceptions.RequestException as exc:
-            logger.error(f"GraphDB restore for repository '{name}' failed during HTTP operation: {exc}")
+        except requests.exceptions.HTTPError as exc:
+            status = getattr(exc.response, "status_code", None)
+            # Fallback for GraphDB Free/community: RDF import via RDF4J API
+            if status in (404, 405):
+                try:
+                    with source_file.open("rb") as f_in:
+                        data_bytes = f_in.read()
+                    r = requests.post(
+                        f"{self._base}/repositories/{name}/statements",
+                        headers={"Content-Type": "application/n-triples"},
+                        data=data_bytes,
+                        timeout=self._timeout,
+                    )
+                    r.raise_for_status()
+                    logger.info(
+                        f"RDF import restore for repository '{name}' completed from {source_file}"
+                    )
+                    return True
+                except requests.exceptions.RequestException as exc2:
+                    logger.error(
+                        f"GraphDB RDF import restore failed for '{name}': {exc2}"
+                    )
+                    return False
+            logger.error(
+                f"GraphDB restore for repository '{name}' failed during HTTP operation: {exc}"
+            )
             return False
         except Exception as exc:
-            logger.error(f"An unexpected error occurred during GraphDB restore for '{name}': {exc}")
+            logger.error(
+                f"An unexpected error occurred during GraphDB restore for '{name}': {exc}"
+            )
             return False
