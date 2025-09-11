@@ -17,6 +17,7 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "16379:6379"
     healthcheck:
@@ -24,6 +25,8 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+    volumes:
+      - ./redis-data:/data
 
   postgres:
     image: postgres:14

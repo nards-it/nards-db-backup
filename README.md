@@ -156,11 +156,13 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
 
 - Run tests in containers (same as GitHub Actions):
 
-  `docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner`
+  `docker compose -f docker-compose.test.yml down -v && docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner`
 
 - Tear down (optional if you used `--exit-code-from`, containers stop automatically):
 
   `docker compose -f docker-compose.test.yml down -v`
+
+- Redis note: in the test compose, the `redis` service runs in a tiny restart loop so that the test's `SHUTDOWN` does not terminate the container and abort the Compose run. This applies only to the test compose.
 
 ### Local venv + pytest
 
@@ -180,6 +182,8 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
   - If you have an existing container named `mysql` running, you may see a name conflict. Stop it or run:
 
     `docker compose -f tests/docker-compose.yml down -v`
+
+  - Redis note (local venv): if reading/writing `tests/redis-data/dump.rdb` hits a PermissionError on your host, the RedisModule automatically falls back to copying via `docker cp` by detecting the Redis container. This requires the `docker` CLI to be available locally.
 
 
 ## License

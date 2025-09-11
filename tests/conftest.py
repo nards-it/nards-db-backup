@@ -35,6 +35,7 @@ def ensure_services_for_local(request):
         os.environ.get("DB_HOST_MYSQL")
         and os.environ.get("DB_HOST_POSTGRES")
         and os.environ.get("DB_HOST_POSTGIS")
+        and os.environ.get("DB_HOST_REDIS")
     ):
         # Yield to satisfy generator fixture contract
         yield
@@ -47,6 +48,7 @@ def ensure_services_for_local(request):
     mysql_port = docker_services.port_for("mysql", 3306)
     pg_port = docker_services.port_for("postgres", 5432)
     postgis_port = docker_services.port_for("postgis", 5432)
+    redis_port = docker_services.port_for("redis", 6379)
 
     # Export env vars consumed by tests
     os.environ.setdefault("DB_HOST_MYSQL", "127.0.0.1")
@@ -70,6 +72,17 @@ def ensure_services_for_local(request):
     os.environ.setdefault("MYSQL_SSL_MODE", "DISABLED")
     os.environ.setdefault("PG_RESTORE_CLEAN", "true")
 
+    # Redis env for tests
+    os.environ.setdefault("DB_HOST_REDIS", "127.0.0.1")
+    os.environ.setdefault("DB_PORT_REDIS", str(redis_port))
+    os.environ.setdefault("DB_PASSWORD_REDIS", "")
+    # Host path to the Redis RDB directory bind-mounted in tests/docker-compose.yml
+    try:
+        root = str(request.config.rootdir)
+    except Exception:
+        root = os.getcwd()
+    os.environ.setdefault("REDIS_RDB_HOST_DIR", os.path.join(root, "tests", "redis-data"))
+
     # Simple TCP readiness checks
     def _tcp_ready(host: str, port: int) -> bool:
         with socket.socket() as s:
@@ -84,6 +97,9 @@ def ensure_services_for_local(request):
     )
     docker_services.wait_until_responsive(
         timeout=120, pause=2, check=lambda: _tcp_ready("127.0.0.1", postgis_port)
+    )
+    docker_services.wait_until_responsive(
+        timeout=120, pause=2, check=lambda: _tcp_ready("127.0.0.1", redis_port)
     )
 
     # Yield to tests; docker_services handles teardown automatically
