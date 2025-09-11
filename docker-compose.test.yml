@@ -22,6 +22,11 @@ services:
       DB_USER_POSTGIS: test_user
       DB_PASSWORD_POSTGIS: test_password
       DB_NAME_POSTGIS: test_database
+      DB_HOST_POSTGIS_VECTOR: postgis_vector
+      DB_PORT_POSTGIS_VECTOR: "5432"
+      DB_USER_POSTGIS_VECTOR: test_user
+      DB_PASSWORD_POSTGIS_VECTOR: test_password
+      DB_NAME_POSTGIS_VECTOR: test_database
       DB_HOST_REDIS: redis
       DB_PORT_REDIS: "6379"
       DB_PASSWORD_REDIS: ""
@@ -63,6 +68,17 @@ services:
       POSTGRES_PASSWORD: test_password
     ports:
       - "15433:5432"
+
+  postgis_vector:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgis_pgvector
+    environment:
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "15434:5432"
 
   redis:
     image: redis:7

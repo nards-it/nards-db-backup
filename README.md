@@ -28,6 +28,7 @@ A Flask application that schedules and manages database backups using cron jobs.
 - Restore database from the most recent backup.
 - Health check endpoint to monitor the status of the last backup operation.
 - Configurable via environment variables.
+- PostGIS extension-aware backups: detects installed extensions (e.g., PostGIS, pgvector) and generates a pre-restore script to recreate them automatically.
 
 ## Configuration
 
@@ -92,6 +93,12 @@ Restore the database from a given configuration name or backup file path:
 If a valid name_or_path is provided it restores this file to the database as configured with environment variables, else it tries to restore the latest backup from the backup configuration name provided with `RESTORE_CONFIG_NAME`. 
 
 If a configuration name is provided, the application will log the chosen backup file for restore.
+
+### PostGIS Extensions (pgvector, etc.)
+
+- When backing up a PostGIS database, the app inspects installed extensions (excluding `plpgsql`) and writes a companion `<backup>.pre.sql` with `CREATE EXTENSION IF NOT EXISTS ...` statements (always including `postgis`, plus any others like `vector`).
+- During restore, the app executes `<backup>.pre.sql` before `pg_restore` so that types/functions from extensions are available.
+- Ensure the target server has required extension packages installed beforehand (for example on Debian-based Postgres 14: `postgresql-14-pgvector` for pgvector), otherwise `CREATE EXTENSION` will fail.
 
 ## Roadmap
 

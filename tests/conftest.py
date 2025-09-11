@@ -118,7 +118,10 @@ def ensure_services_for_local(request):
 
     # Yield to tests; docker_services handles teardown automatically
     yield
+
+
 import pytest
+
 
 @pytest.fixture(scope="session")
 def docker_compose_command():
