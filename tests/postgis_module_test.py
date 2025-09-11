@@ -1,7 +1,6 @@
 import os
 import sys
-
-from psycopg2 import Error
+import time
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from app.modules.postgis_module import PostGISModule
@@ -13,59 +12,38 @@ import pytest
 from pathlib import Path
 import psycopg2
 
-@pytest.fixture(scope="session")
-def docker_compose_file(pytestconfig):
-    return os.path.join(str(pytestconfig.rootdir), "tests", "docker-compose.yml")
 
+@pytest.fixture(scope="session", autouse=True)
+def postgis_connection():
+    """
+    Waits for the PostGIS container to be ready, then sets up the database for tests.
+    """
+    host = os.environ.get("DB_HOST_POSTGIS")
+    port = os.environ.get("DB_PORT_POSTGIS")
+    user = os.environ.get("DB_USER_POSTGIS")
+    password = os.environ.get("DB_PASSWORD_POSTGIS")
+    db_name = os.environ.get("DB_NAME_POSTGIS")
 
-def check_postgis_connection(host, port, user, password, database=None):
-    """Check if Postgis server is ready for connections."""
     connection = None
-    try:
-        # Establish a connection to the Postgis server
-        connection = psycopg2.connect(
-            host=host,
-            port=port,
-            user=user,
-            password=password,
-            database=database
-        )
-
-        if connection:
-            print("Postgis server is ready for connections.")
-            return True
-
-    except Error:
-        return False
-
-    finally:
-        # Close the connection if it was established
-        if connection is not None:
-            connection.close()
-
-@pytest.fixture(scope='session', autouse=True)
-def postgis_connection(docker_ip, docker_services):
-    docker_port = docker_services.port_for("postgis", 5432)
-
-    # Wait until docker iservice is ready to accept connections
-    docker_services.wait_until_responsive(
-        timeout=60.0, pause=0.1, check= lambda: check_postgis_connection(
-            host=docker_ip,
-            port=docker_port,
-            user='test_user',
-            password='test_password',
-            database='test_database'
-        )
-    )
-
-    # Setup: connessione al database
-    connection = psycopg2.connect(
-        host=docker_ip,
-        port=docker_port,
-        user='test_user',
-        password='test_password',
-        database='test_database'
-    )
+    retries = 20
+    while retries > 0:
+        try:
+            connection = psycopg2.connect(
+                host=host,
+                port=port,
+                user=user,
+                password=password,
+                dbname=db_name,
+            )
+            if connection:
+                print("PostGIS server is ready for connections.")
+                break
+        except Exception as e:
+            print(f"Waiting for PostGIS... ({retries} retries left)")
+            retries -= 1
+            time.sleep(3)
+            if retries == 0:
+                raise e
 
     # Create databases without a transaction
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
@@ -82,23 +60,12 @@ def postgis_connection(docker_ip, docker_services):
 
     yield
 
-    cursor.close()
-    connection.close()
-
-    # Setup: connessione al database
+    # Teardown: eliminazione del database di test
     connection = psycopg2.connect(
-        host=docker_ip,
-        port=docker_port,
-        user='test_user',
-        password='test_password',
-        database='test_database'
+        host=host, port=port, user=user, password=password, dbname=db_name
     )
-
-    # Create databases without a transaction
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     cursor = connection.cursor()
-
-    # Teardown: eliminazione del database di test
     cursor.execute("DROP DATABASE test_db")
     cursor.execute("DROP DATABASE test_db_2")
 
@@ -107,33 +74,44 @@ def postgis_connection(docker_ip, docker_services):
 
 
 @pytest.fixture
-def postgis_module(docker_ip, docker_services):
-    docker_port = docker_services.port_for("postgis", 5432)
-    return PostGISModule(docker_ip, docker_port, 'test_user', 'test_password', "test_database")
+def postgis_module():
+    """
+    Initializes the PostGISModule with connection details from environment variables.
+    """
+    host = os.environ.get("DB_HOST_POSTGIS")
+    port = os.environ.get("DB_PORT_POSTGIS")
+    user = os.environ.get("DB_USER_POSTGIS")
+    password = os.environ.get("DB_PASSWORD_POSTGIS")
+    db_name = os.environ.get("DB_NAME_POSTGIS")
+    return PostGISModule(host, port, user, password, db_name)
 
 
-def test_list_all_databases(postgis_module, docker_services):
+def test_list_all_databases(postgis_module):
+    """
+    Tests that the list_all_databases method returns the created test databases.
+    """
     result = postgis_module.list_all_databases()
-    assert 'test_db_2' in result
-    assert 'test_db' in result
+    assert "test_db_2" in result
+    assert "test_db" in result
 
 
-def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, postgis_module):
-    docker_port = docker_services.port_for("postgis", 5432)
+def test_backup_and_restore_database(pytestconfig, postgis_module):
+    """
+    Tests the full backup and restore cycle for a PostGIS database.
+    """
+    host = os.environ.get("DB_HOST_POSTGIS")
+    port = os.environ.get("DB_PORT_POSTGIS")
+    user = os.environ.get("DB_USER_POSTGIS")
+    password = os.environ.get("DB_PASSWORD_POSTGIS")
 
     # Percorso del file di backup
     backup_file = Path(str(pytestconfig.rootdir), "tests", "test_postgis_db_backup.sql")
     if backup_file.exists():
         os.remove(backup_file)
     try:
-
         # Setup: connessione al database
         connection = psycopg2.connect(
-            host=docker_ip,
-            port=docker_port,
-            user='test_user',
-            password='test_password',
-            database='test_db'
+            host=host, port=port, user=user, password=password, database="test_db"
         )
         cursor = connection.cursor()
 
@@ -150,7 +128,7 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
         connection.commit()
 
         # Esecuzione del backup
-        backup_result = postgis_module.backup_database('test_db', backup_file)
+        backup_result = postgis_module.backup_database("test_db", backup_file)
         assert backup_result
 
         # Alterazione dei dati
@@ -162,30 +140,19 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
         connection.close()
 
         # Esecuzione del restore
-        restore_result = postgis_module.restore_database('test_db', backup_file)
+        restore_result = postgis_module.restore_database("test_db", backup_file)
         assert restore_result
 
         # Setup: connessione al database
         connection = psycopg2.connect(
-            host=docker_ip,
-            port=docker_port,
-            user='test_user',
-            password='test_password',
-            database='test_db'
+            host=host, port=port, user=user, password=password, database="test_db"
         )
         cursor = connection.cursor()
-
-        cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS test_table (
-                        id SERIAL PRIMARY KEY,
-                        data VARCHAR(255) NOT NULL
-                    )
-                """)
-        connection.commit()
 
         # Verifica che i dati originali siano stati ripristinati
         cursor.execute("SELECT data FROM test_table")
         restored_data = cursor.fetchone()[0]
+        assert restored_data == "Original Data"
 
         cursor.execute("""
                     SELECT EXISTS (
@@ -195,12 +162,12 @@ def test_backup_and_restore_database(pytestconfig, docker_ip, docker_services, p
                     );
                 """)
         has_postgis = cursor.fetchone()[0]
-        assert has_postgis, "PostGIS extension is not present in the database after restore."
+        assert has_postgis, (
+            "PostGIS extension is not present in the database after restore."
+        )
 
         cursor.close()
         connection.close()
-
-        assert restored_data == 'Original Data'
 
     finally:
         if backup_file.exists():

@@ -1,8 +1,13 @@
 # IntelliJ
+# IntelliJ
 .idea/
 
 # Backup directory
+
+# Backup directory
 backups/
+
+# Virtualenv
 
 # Virtualenv
 venv/
