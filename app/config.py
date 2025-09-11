@@ -10,7 +10,9 @@ logging.basicConfig(level=logging.INFO)
 
 class Config:
     # Database configuration
-    DB_TYPE = os.getenv("DB_TYPE", "mysql")  # Supported: 'mysql', 'postgres', 'postgis', redis and mongoDb
+    DB_TYPE = os.getenv(
+        "DB_TYPE", "mysql"
+    )  # Supported: 'mysql', 'postgres', 'postgis', redis and mongoDb
     DB_HOST = os.getenv("DB_HOST", "localhost")
     port_default = 3306 if DB_TYPE == "mysql" else 5432
     DB_PORT = os.getenv("DB_PORT", port_default)

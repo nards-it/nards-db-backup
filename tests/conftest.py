@@ -36,6 +36,7 @@ def ensure_services_for_local(request):
         and os.environ.get("DB_HOST_POSTGRES")
         and os.environ.get("DB_HOST_POSTGIS")
         and os.environ.get("DB_HOST_REDIS")
+        and os.environ.get("DB_HOST_MONGODB")
     ):
         # Yield to satisfy generator fixture contract
         yield
@@ -49,6 +50,7 @@ def ensure_services_for_local(request):
     pg_port = docker_services.port_for("postgres", 5432)
     postgis_port = docker_services.port_for("postgis", 5432)
     redis_port = docker_services.port_for("redis", 6379)
+    mongodb_port = docker_services.port_for("mongodb", 27017)
 
     # Export env vars consumed by tests
     os.environ.setdefault("DB_HOST_MYSQL", "127.0.0.1")
@@ -85,6 +87,13 @@ def ensure_services_for_local(request):
         "REDIS_RDB_HOST_DIR", os.path.join(root, "tests", "redis-data")
     )
 
+    # MongoDB env for tests
+    os.environ.setdefault("DB_HOST_MONGODB", "127.0.0.1")
+    os.environ.setdefault("DB_PORT_MONGODB", str(mongodb_port))
+    os.environ.setdefault("DB_USER_MONGODB", "testuser")
+    os.environ.setdefault("DB_PASSWORD_MONGODB", "testpassword")
+    os.environ.setdefault("DB_NAME_MONGODB", "admin")
+
     # Simple TCP readiness checks
     def _tcp_ready(host: str, port: int) -> bool:
         with socket.socket() as s:
@@ -102,6 +111,9 @@ def ensure_services_for_local(request):
     )
     docker_services.wait_until_responsive(
         timeout=120, pause=2, check=lambda: _tcp_ready("127.0.0.1", redis_port)
+    )
+    docker_services.wait_until_responsive(
+        timeout=150, pause=2, check=lambda: _tcp_ready("127.0.0.1", mongodb_port)
     )
 
     # Yield to tests; docker_services handles teardown automatically

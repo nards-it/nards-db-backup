@@ -3,7 +3,7 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import List
-from pymongo import MongoClient # Moved import to top
+from pymongo import MongoClient  # Moved import to top
 
 # Import the abstract module that enforces the interface
 from app.modules.abstract_module import AbstractModule
@@ -18,11 +18,13 @@ class MongoDBModule(AbstractModule):
     Concrete implementation of AbstractModule for MongoDB databases, providing methods
     for listing, backing up, and restoring databases.
     """
-    
-    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
+
+    def __init__(
+        self, host: str, port: str, username: str, password: str, maintenance_db: str
+    ):
         """
         Initializes the MongoDBModule with connection details.
-        
+
         Args:
             host (str): The hostname of the MongoDB server.
             port (str): The port number of the MongoDB server.
@@ -35,10 +37,10 @@ class MongoDBModule(AbstractModule):
     def _connect(self):
         """
         Establishes a connection to the MongoDB server.
-        
+
         Attempts up to 6 times with increasing wait times (5 * attempt seconds)
         in case of failure, similar to the MySQL module.
-        
+
         Returns:
             MongoClient: The MongoClient object if the connection is successful, None otherwise.
         """
@@ -46,7 +48,9 @@ class MongoDBModule(AbstractModule):
         client = None
         for attempt in range(1, 7):
             try:
-                logger.info(f"Attempt {attempt}: Connecting to MongoDB at {self._host}:{self._port}")
+                logger.info(
+                    f"Attempt {attempt}: Connecting to MongoDB at {self._host}:{self._port}"
+                )
                 # Create the connection URI including credentials and the maintenance database
                 uri = f"mongodb://{self._username}:{self._password}@{self._host}:{self._port}/{self._maintenance_db}?authSource=admin"
                 client = MongoClient(uri, serverSelectionTimeoutMS=5000)
@@ -65,7 +69,7 @@ class MongoDBModule(AbstractModule):
     def list_all_databases(self) -> List[str]:
         """
         Lists all databases on the MongoDB server, excluding system databases.
-        
+
         Returns:
             List[str]: A list of non-system database names.
         """
@@ -75,7 +79,7 @@ class MongoDBModule(AbstractModule):
                 # Retrieve all database names
                 databases = client.list_database_names()
                 # Exclude system databases ('admin', 'local', 'config')
-                system_dbs = ['admin', 'local', 'config']
+                system_dbs = ["admin", "local", "config"]
                 filtered = [db for db in databases if db not in system_dbs]
                 return filtered
             except Exception as e:
@@ -91,15 +95,15 @@ class MongoDBModule(AbstractModule):
     def backup_database(self, name: str, destination_file: Path) -> bool:
         """
         Performs a backup of the specified MongoDB database using the 'mongodump' utility.
-        
+
         Utilizes:
           - the --archive option to create a single backup file
           - the --gzip option to compress the dump
-        
+
         Args:
             name (str): The name of the database to back up.
             destination_file (Path): The path to the backup file.
-        
+
         Returns:
             bool: True if the backup is successful, False otherwise.
         """
@@ -112,31 +116,37 @@ class MongoDBModule(AbstractModule):
             f"--db={name}",
             "--authenticationDatabase=admin",
             f"--archive={destination_file}",
-            "--gzip"
+            "--gzip",
         ]
         try:
-            process = subprocess.run(cmd_list, check=True, text=True, capture_output=True)
-            logger.info(f"Backup of MongoDB database '{name}' completed successfully to {destination_file}.")
+            process = subprocess.run(
+                cmd_list, check=True, text=True, capture_output=True
+            )
+            logger.info(
+                f"Backup of MongoDB database '{name}' completed successfully to {destination_file}."
+            )
             if process.stdout:
                 logger.debug(f"mongodump stdout: {process.stdout}")
             if process.stderr:
                 logger.info(f"mongodump stderr: {process.stderr}")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error backing up MongoDB database '{name}': {e}. stderr: {e.stderr}, stdout: {e.stdout}")
+            logger.error(
+                f"Error backing up MongoDB database '{name}': {e}. stderr: {e.stderr}, stdout: {e.stdout}"
+            )
             return False
 
     def restore_database(self, name: str, source_file: Path) -> bool:
         """
         Restores the specified MongoDB database using the 'mongorestore' utility.
-        
+
         The --drop option removes the existing database before restoration,
         ensuring a clean restore.
-        
+
         Args:
             name (str): The name of the database to restore.
             source_file (Path): The path to the backup file.
-        
+
         Returns:
             bool: True if the restoration is successful, False otherwise.
         """
@@ -150,16 +160,22 @@ class MongoDBModule(AbstractModule):
             "--authenticationDatabase=admin",
             "--drop",
             f"--archive={source_file}",
-            "--gzip"
+            "--gzip",
         ]
         try:
-            process = subprocess.run(cmd_list, check=True, text=True, capture_output=True)
-            logger.info(f"Restore of MongoDB database '{name}' completed successfully from {source_file}.")
+            process = subprocess.run(
+                cmd_list, check=True, text=True, capture_output=True
+            )
+            logger.info(
+                f"Restore of MongoDB database '{name}' completed successfully from {source_file}."
+            )
             if process.stdout:
                 logger.info(f"mongorestore stdout: {process.stdout}")
             if process.stderr:
                 logger.info(f"mongorestore stderr: {process.stderr}")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error restoring MongoDB database '{name}': {e}. stderr: {e.stderr}, stdout: {e.stdout}")
+            logger.error(
+                f"Error restoring MongoDB database '{name}': {e}. stderr: {e.stderr}, stdout: {e.stdout}"
+            )
             return False

@@ -163,6 +163,8 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
   `docker compose -f docker-compose.test.yml down -v`
 
 - Redis note: in the test compose, the `redis` service runs in a tiny restart loop so that the test's `SHUTDOWN` does not terminate the container and abort the Compose run. This applies only to the test compose.
+  
+- MongoDB note: the service is named `mongodb` in `docker-compose.test.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
 
 ### Local venv + pytest
 
@@ -179,6 +181,7 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
 
 - Notes:
   - `tests/conftest.py` automatically brings up services from `tests/docker-compose.yml` and exports the needed env vars; no manual setup needed.
+  - Includes MongoDB via the `mongodb` service; credentials: `testuser` / `testpassword` with `authSource=admin`.
   - If you have an existing container named `mysql` running, you may see a name conflict. Stop it or run:
 
     `docker compose -f tests/docker-compose.yml down -v`

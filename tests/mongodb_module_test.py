@@ -9,70 +9,68 @@ from app.modules.mongodb_module import MongoDBModule
 # Add project root to the path to import application modules
 sys.path.insert(1, os.getcwd())
 
-@pytest.fixture(scope="session")
-def docker_compose_file(pytestconfig):
-    """Get an absolute path to the docker-compose.yml file for tests."""
-    return os.path.join(str(pytestconfig.rootdir), "tests", "docker-compose.yml")
 
-def check_mongo_connection(host, port, user, password):
-    """Checks if MongoDB is ready for connections."""
-    print(f"Checking MongoDB connection to {host}:{port}")
+def _check_mongo_connection(host: str, port: str, user: str, password: str) -> bool:
     try:
-        # Connect specifying authSource=admin, as credentials are root-level.
-        # The database in the URI here is less important for a ping, but 'admin' is a safe choice.
         uri = f"mongodb://{user}:{password}@{host}:{port}/admin?authSource=admin"
-        client = MongoClient(uri, serverSelectionTimeoutMS=5000) # Timeout for server selection
-        # The 'ping' command is a lightweight way to verify connection and authentication.
-        client.admin.command('ping') 
-        print(f"MongoDB connection successful.")
+        client = MongoClient(uri, serverSelectionTimeoutMS=3000)
+        client.admin.command("ping")
         return True
-    except Exception as e:
-        print(f"MongoDB connection failed: {e}")
+    except Exception:
         return False
 
-@pytest.fixture(scope="session", autouse=True)
-def mongodb_service(docker_ip, docker_services):
-    """Ensures the MongoDB service is up and responsive."""
-    docker_port = docker_services.port_for("mongodb", 27017) # Service name and internal port
-    print(f"MongoDB service exposed on {docker_ip}:{docker_port}")
-    
-    # Wait until MongoDB is responsive
-    docker_services.wait_until_responsive(
-        timeout=120.0, # Increased timeout to allow MongoDB to initialize
-        pause=1.0,    # Longer pause between attempts
-        check=lambda: check_mongo_connection(
-            host=docker_ip, 
-            port=docker_port, 
-            user="testuser", # User defined in docker-compose.yml for mongodb
-            password="testpassword"  # Password defined in docker-compose.yml for mongodb
-        )
+
+@pytest.fixture(scope="session")
+def mongodb_env():
+    host = os.environ.get("DB_HOST_MONGODB")
+    port = os.environ.get("DB_PORT_MONGODB")
+    user = os.environ.get("DB_USER_MONGODB", "testuser")
+    password = os.environ.get("DB_PASSWORD_MONGODB", "testpassword")
+    assert host and port, (
+        "MongoDB env not configured (DB_HOST_MONGODB/DB_PORT_MONGODB)."
     )
-    print("MongoDB service is responsive.")
-    # No need to return anything here; the fixture just waits for the service.
+    deadline = time.time() + 120
+    while time.time() < deadline and not _check_mongo_connection(
+        host, port, user, password
+    ):
+        time.sleep(1.0)
+    assert _check_mongo_connection(host, port, user, password), (
+        "MongoDB not responsive in time"
+    )
+    yield {
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "maintenance_db": os.environ.get("DB_NAME_MONGODB", "admin"),
+    }
+
 
 @pytest.fixture
-def mongodb_client(docker_ip, docker_services):
-    """Provides a connected MongoDB client for tests and creates test data."""
-    docker_port = docker_services.port_for("mongodb", 27017)
-    client = MongoClient(f"mongodb://testuser:testpassword@{docker_ip}:{docker_port}/test_db_module?authSource=admin")
-    
+def mongodb_client(mongodb_env):
+    client = MongoClient(
+        f"mongodb://{mongodb_env['user']}:{mongodb_env['password']}@{mongodb_env['host']}:{mongodb_env['port']}/test_db_module?authSource=admin"
+    )
     # Create test data
-    db = client["test_db_module"] # Database specific to this test
+    db = client["test_db_module"]
     db.test_collection.insert_one({"key": "Original Data", "module_test": True})
-    
     yield client
-    
-    # Cleanup: drop the module-specific test database
-    client.drop_database("test_db_module")
-    client.close()
+    # Cleanup
+    try:
+        client.drop_database("test_db_module")
+    finally:
+        client.close()
 
 
 @pytest.fixture
-def mongodb_module(docker_ip, docker_services):
-    """Instantiates the MongoDBModule for testing."""
-    docker_port = docker_services.port_for("mongodb", 27017)
-    # 'admin' is often used as the maintenance_db for authentication in MongoDB
-    return MongoDBModule(docker_ip, str(docker_port), "testuser", "testpassword", "admin")
+def mongodb_module(mongodb_env):
+    return MongoDBModule(
+        mongodb_env["host"],
+        str(mongodb_env["port"]),
+        mongodb_env["user"],
+        mongodb_env["password"],
+        mongodb_env["maintenance_db"],
+    )
 
 
 def test_list_all_databases(mongodb_module, mongodb_client):
@@ -87,11 +85,12 @@ def test_list_all_databases(mongodb_module, mongodb_client):
     assert "local" not in databases
     assert "config" not in databases
 
+
 def test_backup_and_restore_database(pytestconfig, mongodb_client, mongodb_module):
     """Tests MongoDB backup and restore functionality."""
-    db_name_to_test = "test_db_module" # Database created by mongodb_client
+    db_name_to_test = "test_db_module"  # Database created by mongodb_client
     db = mongodb_client[db_name_to_test]
-    
+
     # Define backup file path
     backup_dir = Path(str(pytestconfig.rootdir)) / "tests" / "backup_temp"
     backup_dir.mkdir(parents=True, exist_ok=True)
@@ -109,7 +108,9 @@ def test_backup_and_restore_database(pytestconfig, mongodb_client, mongodb_modul
         # 2. Perform backup
         print(f"Attempting backup of '{db_name_to_test}' to '{backup_file}'")
         backup_result = mongodb_module.backup_database(db_name_to_test, backup_file)
-        assert backup_result, f"Backup failed. Check logs. Command was for {backup_file}"
+        assert backup_result, (
+            f"Backup failed. Check logs. Command was for {backup_file}"
+        )
         assert backup_file.exists(), "Backup file was not created."
         assert backup_file.stat().st_size > 0, "Backup file is empty."
 
@@ -131,7 +132,9 @@ def test_backup_and_restore_database(pytestconfig, mongodb_client, mongodb_modul
         # (the client in mongodb_client should still be valid).
         restored_data = db.test_collection.find_one({"module_test": True})
         assert restored_data is not None, "No data found after restore."
-        assert restored_data["key"] == "Original Data", "Restored data does not match original data."
+        assert restored_data["key"] == "Original Data", (
+            "Restored data does not match original data."
+        )
 
     finally:
         # Cleanup backup file and directory
@@ -139,5 +142,6 @@ def test_backup_and_restore_database(pytestconfig, mongodb_client, mongodb_modul
             os.remove(backup_file)
         if backup_dir.exists():
             # Remove temporary files and then the directory if empty
-            for f in backup_dir.iterdir(): os.remove(f) # Ensures directory is empty before rmdir
+            for f in backup_dir.iterdir():
+                os.remove(f)  # Ensures directory is empty before rmdir
             backup_dir.rmdir()

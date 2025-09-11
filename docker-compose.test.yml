@@ -26,6 +26,11 @@ services:
       DB_PORT_REDIS: "6379"
       DB_PASSWORD_REDIS: ""
       REDIS_RDB_HOST_DIR: "/data"
+      DB_HOST_MONGODB: mongodb
+      DB_PORT_MONGODB: "27017"
+      DB_USER_MONGODB: testuser
+      DB_PASSWORD_MONGODB: testpassword
+      DB_NAME_MONGODB: admin
       MYSQL_SSL_MODE: "DISABLED"
       PG_RESTORE_CLEAN: "true"
 
@@ -73,7 +78,7 @@ services:
     volumes:
       - redis-data:/data
 
-  mongo:
+  mongodb:
     image: mongo:6.0
     environment:
       MONGO_INITDB_ROOT_USERNAME: testuser
