@@ -275,7 +275,7 @@ class RedisModule(AbstractModule):
             if dest_desc is None:
                 dest_desc = "<unknown>"
             logger.info(f"Redis RDB file '{source_file}' copied to target location '{dest_desc}'.")
-            logger.info(f"A Redis server restart is required to load the restored RDB file.")
+            logger.info("A Redis server restart is required to load the restored RDB file.")
             # The module itself won't try to reload or restart Redis. This should be handled by the caller.
             return True
         except redis.exceptions.RedisError as e:
