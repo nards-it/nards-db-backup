@@ -27,7 +27,7 @@ class GraphDBModule(AbstractModule):
         port: str,
         username: Optional[str] = None,
         password: Optional[str] = None,
-        maintenance_db: str = "", # Ignored by GraphDBModule, kept for super() compatibility
+        maintenance_db: str = "",  # Ignored by GraphDBModule, kept for super() compatibility
         timeout: int = 60,
     ):
         """
@@ -43,7 +43,9 @@ class GraphDBModule(AbstractModule):
         """
         super().__init__(host, port, username, password, maintenance_db or "")
         self._base = f"http://{self._host}:{self._port}"
-        self._auth = HTTPBasicAuth(username, password) if username and password else None
+        self._auth = (
+            HTTPBasicAuth(username, password) if username and password else None
+        )
         self._timeout = timeout
 
     # HTTP helpers
@@ -69,12 +71,16 @@ class GraphDBModule(AbstractModule):
         """
         try:
             data = self._get("/rest/repositories").json()
-            return [repo["id"] for repo in data if isinstance(repo, dict) and "id" in repo]
+            return [
+                repo["id"] for repo in data if isinstance(repo, dict) and "id" in repo
+            ]
         except requests.exceptions.RequestException as exc:
             logger.error(f"Failed to retrieve repository list from GraphDB: {exc}")
             return []
         except Exception as exc:
-            logger.error(f"An unexpected error occurred while listing GraphDB repositories: {exc}")
+            logger.error(
+                f"An unexpected error occurred while listing GraphDB repositories: {exc}"
+            )
             return []
 
     def backup_database(self, name: str, destination_file: Path) -> bool:
@@ -158,7 +164,9 @@ class GraphDBModule(AbstractModule):
             bool: True if the restore was successful, False otherwise.
         """
         if not source_file.exists():
-            logger.error(f"Backup file {source_file} does not exist for GraphDB restore.")
+            logger.error(
+                f"Backup file {source_file} does not exist for GraphDB restore."
+            )
             return False
 
         logger.info(

@@ -2,7 +2,6 @@ import time
 import os
 import json
 import logging
-from pathlib import Path
 
 import pytest
 import requests
@@ -11,6 +10,7 @@ from app.modules.graphdb_module import GraphDBModule
 
 REPO = "test_repo_pytest"
 log = logging.getLogger(__name__)
+
 
 def _post_update(base_url: str, repo: str, update_str: str) -> requests.Response:
     """Attempts SPARQL UPDATE via multiple compatible paths, logging body on failure."""
@@ -49,6 +49,7 @@ def _post_update(base_url: str, repo: str, update_str: str) -> requests.Response
         print("GRAPHDB UPDATE fallback2 error:", r.status_code, r.text)
     return r
 
+
 @pytest.fixture(scope="session")
 def graphdb_host_port(request):
     """Return host/port from env in CI; locally resolve via docker_services only if needed.
@@ -66,11 +67,13 @@ def graphdb_host_port(request):
     docker_services = request.getfixturevalue("docker_services")
     return "localhost", docker_services.port_for("graphdb", 7200)
 
+
 @pytest.fixture(scope="session")
 def base_url(graphdb_host_port):
     """Return GraphDB base URL using env or dynamic port."""
     host, port = graphdb_host_port
     return f"http://{host}:{port}"
+
 
 def create_graphdb_repo(base_url: str, repo_id: str, title: str = "Test Repository"):
     """Create a GraphDB repository using a hardcoded Turtle config. Skip on failure."""
@@ -98,8 +101,8 @@ def create_graphdb_repo(base_url: str, repo_id: str, title: str = "Test Reposito
         "params": {
             "ruleset": "rdfsplus-optimized",
             "readOnly": False,
-            "disableUpdate": False
-        }
+            "disableUpdate": False,
+        },
     }
     try:
         # First try: vendor content-type
@@ -110,7 +113,11 @@ def create_graphdb_repo(base_url: str, repo_id: str, title: str = "Test Reposito
             timeout=30,
         )
         if not r_create_json.ok:
-            print("GraphDB repo JSON (vendor) failed:", r_create_json.status_code, r_create_json.text)
+            print(
+                "GraphDB repo JSON (vendor) failed:",
+                r_create_json.status_code,
+                r_create_json.text,
+            )
             # Second try: application/json
             r_create_json = requests.post(
                 f"{base_url}/rest/repositories",
@@ -122,7 +129,11 @@ def create_graphdb_repo(base_url: str, repo_id: str, title: str = "Test Reposito
             time.sleep(5)
             return
         else:
-            print("GraphDB repo JSON (application/json) failed:", r_create_json.status_code, r_create_json.text)
+            print(
+                "GraphDB repo JSON (application/json) failed:",
+                r_create_json.status_code,
+                r_create_json.text,
+            )
     except requests.RequestException as e:
         print("GraphDB repo JSON creation exception:", e)
 
@@ -142,20 +153,26 @@ def create_graphdb_repo(base_url: str, repo_id: str, title: str = "Test Reposito
     r_create = requests.post(
         f"{base_url}/rest/repositories",
         files={"config": ("config.ttl", ttl, "text/turtle")},
-        timeout=30
+        timeout=30,
     )
     if not r_create.ok:
         body = r_create.text
-        print("\n--- GraphDB repo creation error body ---\n" + body + "\n--- end body ---\n")
+        print(
+            "\n--- GraphDB repo creation error body ---\n"
+            + body
+            + "\n--- end body ---\n"
+        )
         pytest.skip(
             f"Repository creation error '{repo_id}': HTTP {r_create.status_code}. Body: {body}"
         )
     time.sleep(5)
 
+
 @pytest.fixture(scope="session", autouse=True)
 def ensure_repo(base_url):
     """Ensure the test repository exists."""
     create_graphdb_repo(base_url, REPO, title="Pytest repo")
+
 
 @pytest.fixture
 def mod(graphdb_host_port):
@@ -163,19 +180,21 @@ def mod(graphdb_host_port):
     host, port = graphdb_host_port
     return GraphDBModule(host=host, port=str(port))
 
+
 @pytest.fixture
 def sparql_headers():
     return {
         "update": {"Content-Type": "application/sparql-update"},
-        "query":  {"Accept": "application/sparql-results+json"}
+        "query": {"Accept": "application/sparql-results+json"},
     }
+
 
 @pytest.fixture
 def sample_triple():
     subj = "http://example.org/s"
     pred = "http://example.org/p"
-    val  = f"v_{int(time.time())}"
-    lit  = f'"{val}"'
+    val = f"v_{int(time.time())}"
+    lit = f'"{val}"'
     return subj, pred, lit
 
 
@@ -195,14 +214,16 @@ def test_backup_creates_file(mod, tmp_path, base_url, sparql_headers, sample_tri
     backup_file = tmp_path / f"{REPO}.zip"
     success = mod.backup_database(REPO, backup_file)
     assert success, "backup_database returned False"
-    assert backup_file.exists() and backup_file.stat().st_size > 0, "Backup file missing or empty"
+    assert backup_file.exists() and backup_file.stat().st_size > 0, (
+        "Backup file missing or empty"
+    )
 
 
 def test_restore_recovers_data(mod, tmp_path, base_url, sparql_headers, sample_triple):
     """Ensure restore_database restores data from a backup."""
     subj, pred, lit = sample_triple
     q_insert = f"INSERT DATA {{ <{subj}> <{pred}> {lit} . }}"
-    q_ask    = f"ASK {{ <{subj}> <{pred}> {lit} . }}"
+    q_ask = f"ASK {{ <{subj}> <{pred}> {lit} . }}"
     q_delete = f"DELETE DATA {{ <{subj}> <{pred}> {lit} . }}"
 
     # Insert
@@ -215,7 +236,9 @@ def test_restore_recovers_data(mod, tmp_path, base_url, sparql_headers, sample_t
     # Verify deletion
     resp_del = requests.get(
         f"{base_url}/repositories/{REPO}",
-        params={"query": q_ask}, headers=sparql_headers["query"], timeout=10
+        params={"query": q_ask},
+        headers=sparql_headers["query"],
+        timeout=10,
     )
     resp_del.raise_for_status()
     assert resp_del.json().get("boolean") is False, "Data still present after delete"
@@ -225,7 +248,9 @@ def test_restore_recovers_data(mod, tmp_path, base_url, sparql_headers, sample_t
     # Verify restore
     resp_res = requests.get(
         f"{base_url}/repositories/{REPO}",
-        params={"query": q_ask}, headers=sparql_headers["query"], timeout=10
+        params={"query": q_ask},
+        headers=sparql_headers["query"],
+        timeout=10,
     )
     resp_res.raise_for_status()
     assert resp_res.json().get("boolean") is True, "Data not found after restore"
