@@ -1,5 +1,6 @@
 services:
   mysql:
+    container_name: mysql
     image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
@@ -14,6 +15,19 @@ services:
       timeout: 10s
       retries: 10
 
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - ./redis-data:/data
+
   postgres:
     image: postgres:14
     environment:
@@ -27,6 +41,22 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+
+  mongodb:
+    image: mongo:6.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: testuser
+      MONGO_INITDB_ROOT_PASSWORD: testpassword
+      MONGO_INITDB_DATABASE: admin
+    ports:
+      - "17017:27017"
+    healthcheck:
+      test: |
+        mongosh --host localhost --port 27017 --username $$MONGO_INITDB_ROOT_USERNAME --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval "db.adminCommand('ping')" || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
 
   postgis:
     build:

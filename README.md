@@ -18,7 +18,8 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 # Flask Backup Application
 
-A Flask application that schedules and manages database backups using cron jobs. It supports both MySQL and PostGIS databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL, MongoDB and PostGIS databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostGIS, PostgreSQL, MongoDB and Redis databases and can restore backups via command-line arguments.
 
 ## Features
 
@@ -33,11 +34,11 @@ A Flask application that schedules and manages database backups using cron jobs.
 Configure the application via environment variables. Create a `.env` file with the following variables:
 
 - `DB_HOST=localhost`
-- `DB_PORT=5432`
+- `DB_PORT=5432` # (e.g., MySQL: 3306, Postgres/PostGIS: 5432, MongoDB: 27017)
 - `DB_USER=user`
 - `DB_PASSWORD=password`
-- `DB_MAINTENANCE_NAME=mydb`
-- `DB_TYPE=mysql` or `postgis`
+- `DB_MAINTENANCE_NAME=mydb` # For MongoDB, this is often 'admin' if using auth # For SQL databases; less relevant for Redis
+- `DB_TYPE=mysql` or `postgres`, `postgis`, `postgres`, or `redis` or `postgres` or `mongodb`
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
 - `RESTORE_CONFIG_NAME=""`
 
@@ -64,11 +65,11 @@ services:
     build: .
     environment:
       DB_HOST: 'database'
-      DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306
+      DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306; mongodb: 27017; redis: 6379
       DB_USER: 'user'
       DB_PASSWORD: 'password'
-      DB_MAINTENANCE_NAME: 'mydatabase' # defaults to DB_USER
-      DB_TYPE: 'postgres' # postgres/postgis/mysql
+      DB_MAINTENANCE_NAME: 'mydatabase' # For SQL databases; for Redis, typically not used or set to 0 for the default DB., for MongoDB often 'admin'
+      DB_TYPE: 'postgres' # postgres/postgis/mysql/mongodb/redis
       BACKUP_DIR: /backups
       CRON_CONFIGS: '[{"cron": "0 * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
       # RESTORE_CONFIG_NAME: 'hourly' # When you have to restore some content
@@ -124,8 +125,8 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 ### Requirements
 
 - Docker (optional, for containerized deployment)
-- Python 3.9
-- MySQL or PostGIS database
+- Python 3.9 (or compatible, e.g., 3.10 as per Dockerfile)
+- MySQL, PostgreSQL, PostGIS, PostgreSQL, Redis, or MongoDB database
 
 ### Build using Docker
 
@@ -146,6 +147,47 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 2. Run the application:
 
    `python app.py`
+
+## Testing
+
+You can run the test suite in two ways, either mirroring the CI pipeline with Docker Compose, or directly from your local virtual environment using pytest (with Docker-managed services).
+
+### CI-like (Docker Compose)
+
+- Run tests in containers (same as GitHub Actions):
+
+  `docker compose -f docker-compose.test.yml down -v && docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner`
+
+- Tear down (optional if you used `--exit-code-from`, containers stop automatically):
+
+  `docker compose -f docker-compose.test.yml down -v`
+
+- Redis note: in the test compose, the `redis` service runs in a tiny restart loop so that the test's `SHUTDOWN` does not terminate the container and abort the Compose run. This applies only to the test compose.
+  
+- MongoDB note: the service is named `mongodb` in `docker-compose.test.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
+
+### Local venv + pytest
+
+- Requirements:
+  - Docker installed and running
+  - Database CLI tools available on your host PATH:
+    - MySQL: `mysqldump` (from `mariadb-client` or `mysql-client`)
+    - PostgreSQL: `pg_dump`, `pg_restore`, `psql` (from `postgresql-client`)
+  - Python dependencies installed: `pip install -r requirements.txt`
+
+- Run tests from your venv; the test stack is auto-started by pytest (pytest-docker):
+
+  `source venv/bin/activate && pytest -q`
+
+- Notes:
+  - `tests/conftest.py` automatically brings up services from `tests/docker-compose.yml` and exports the needed env vars; no manual setup needed.
+  - Includes MongoDB via the `mongodb` service; credentials: `testuser` / `testpassword` with `authSource=admin`.
+  - If you have an existing container named `mysql` running, you may see a name conflict. Stop it or run:
+
+    `docker compose -f tests/docker-compose.yml down -v`
+
+  - Redis note (local venv): if reading/writing `tests/redis-data/dump.rdb` hits a PermissionError on your host, the RedisModule automatically falls back to copying via `docker cp` by detecting the Redis container. This requires the `docker` CLI to be available locally.
+
 
 ## License
 

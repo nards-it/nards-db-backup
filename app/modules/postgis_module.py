@@ -5,6 +5,7 @@ from typing import List
 import subprocess
 import logging
 import json
+import os
 
 from app.modules.abstract_module import AbstractModule
 
@@ -19,7 +20,9 @@ class PostGISModule(AbstractModule):
     providing methods for listing, backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
+    def __init__(
+        self, host: str, port: str, username: str, password: str, maintenance_db: str
+    ):
         """
         Initializes the PostGISModule with connection details.
 
@@ -44,7 +47,7 @@ class PostGISModule(AbstractModule):
                 port=self._port,
                 user=self._username,
                 password=self._password,
-                dbname=self._maintenance_db
+                dbname=self._maintenance_db,
             )
             logger.info("Successfully connected to PostgreSQL database.")
             return connection
@@ -63,7 +66,9 @@ class PostGISModule(AbstractModule):
         if connection:
             try:
                 cursor = connection.cursor()
-                cursor.execute("SELECT datname FROM pg_database WHERE datistemplate = false;")
+                cursor.execute(
+                    "SELECT datname FROM pg_database WHERE datistemplate = false;"
+                )
                 databases = cursor.fetchall()
                 cursor.close()
                 return [db[0] for db in databases]
@@ -139,7 +144,7 @@ class PostGISModule(AbstractModule):
         try:
             # Set the PGPASSWORD environment variable to avoid password prompt
             env = {"PGPASSWORD": self._password}
-            result = subprocess.run(command, shell=True, check=True, text=True, env=env)
+            subprocess.run(command, shell=True, check=True, text=True, env=env)
             logger.info(f"Backup successful for database {name} to {destination_file}.")
             return True
         except subprocess.CalledProcessError as e:
@@ -159,25 +164,46 @@ class PostGISModule(AbstractModule):
         """
 
         # Set environment variable for password
-        env = {
-            "PGPASSWORD": self._password
-        }
+        env = {"PGPASSWORD": self._password}
 
-        drop_command = (f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
-                        f"-c 'DROP DATABASE IF EXISTS {name};'")
-        create_command = (f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
-                          f"-c 'CREATE DATABASE {name};'")
-        enable_postgis_command = (f"psql -h {self._host} -p {self._port} -U {self._username} -d {name} "
-                                  f"-c 'CREATE EXTENSION postgis;'")
-        restore_command = f"pg_restore -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
+        drop_command = (
+            f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"-c 'DROP DATABASE IF EXISTS {name};'"
+        )
+        create_command = (
+            f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"-c 'CREATE DATABASE {name};'"
+        )
+        enable_postgis_command = (
+            f"psql -h {self._host} -p {self._port} -U {self._username} -d {name} "
+            f"-c 'CREATE EXTENSION postgis;'"
+        )
+        clean_param = ""
+        if os.environ.get("PG_RESTORE_CLEAN") == "true":
+            clean_param = "--clean --if-exists"
+        restore_command = f"pg_restore {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
 
         try:
             # Drop the database
-            subprocess.run(drop_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
+            subprocess.run(
+                drop_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
             logger.info(f"Database {name} dropped successfully.")
 
             # Create the database
-            subprocess.run(create_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
+            subprocess.run(
+                create_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
             logger.info(f"Database {name} created successfully.")
 
             # Execute .pre.sql script if it exists to create extensions
@@ -223,17 +249,27 @@ class PostGISModule(AbstractModule):
                                f"Extensions (beyond those in the main dump) might not be restored.")
 
             # Restore the database from the backup file
-            subprocess.run(restore_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
+            subprocess.run(
+                restore_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
             logger.info(f"Restore successful for database {name} from {source_file}.")
             return True
         except subprocess.CalledProcessError as e:
             logger.error(
                 f"Error restoring database {name}: {e}. "
-                f"Command: {drop_command if e.cmd == drop_command else (enable_postgis_command if e.cmd == enable_postgis_command else restore_command)}")
+                f"Command: {drop_command if e.cmd == drop_command else (enable_postgis_command if e.cmd == enable_postgis_command else restore_command)}"
+            )
             return False
         except FileNotFoundError:
             logger.error(f"Backup file {source_file} not found.")
             return False
         except Exception as e:
-            logger.error(f"Unexpected error occurred while restoring database {name}: {e}")
+            logger.error(
+                f"Unexpected error occurred while restoring database {name}: {e}"
+            )
             return False
