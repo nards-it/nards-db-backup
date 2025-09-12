@@ -169,15 +169,15 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
 
 - Run tests in containers (same as GitHub Actions):
 
-  `docker compose -f docker-compose.test.yml down -v && docker compose -f docker-compose.test.yml up --build --exit-code-from test-runner`
+  `docker compose -f docker-compose.quickstart.yml down -v && docker compose -f docker-compose.quickstart.yml up --build --exit-code-from test-runner`
 
 - Tear down (optional if you used `--exit-code-from`, containers stop automatically):
 
-  `docker compose -f docker-compose.test.yml down -v`
+  `docker compose -f docker-compose.quickstart.yml down -v`
 
 - Redis note: in the test compose, the `redis` service runs in a tiny restart loop so that the test's `SHUTDOWN` does not terminate the container and abort the Compose run. This applies only to the test compose.
   
-- MongoDB note: the service is named `mongodb` in `docker-compose.test.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
+- MongoDB note: the service is named `mongodb` in `docker-compose.quickstart.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
 
 - GraphDB note: the test stack includes a `graphdb` service (GraphDB Free). The GraphDB module prefers enterprise recovery endpoints when available; with GraphDB Free, it transparently falls back to RDF export/import (N‑Triples) for backup/restore. Port defaults to `7200`.
 

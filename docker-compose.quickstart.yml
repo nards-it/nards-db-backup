@@ -74,7 +74,7 @@ services:
   postgis_vector:
     build:
       context: .
-      dockerfile: Dockerfile.postgis_pgvector
+      dockerfile: tests/resources/pgvector/Dockerfile.postgis_pgvector
     environment:
       POSTGRES_DB: test_database
       POSTGRES_USER: test_user
