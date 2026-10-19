@@ -10,7 +10,9 @@ class _BackupModule(AbstractModule):
     """In-memory test double for the scheduler's backup lifecycle."""
 
     def __init__(self, file_extension: str):
-        super().__init__("host", "port", "user", "password", "maintenance", file_extension)
+        super().__init__(
+            "host", "port", "user", "password", "maintenance", file_extension
+        )
         self.backup_destinations = []
         self.compressed_files = []
 

@@ -1,14 +1,17 @@
 import os
 import sys
 import time
+
 from mysql.connector import Error
 
 # insert root directory into python module search path
 sys.path.insert(1, os.getcwd())
 
-import pytest
 from pathlib import Path
+
 import mysql.connector
+import pytest
+
 from app.modules.mysql_module import MySQLModule
 
 
@@ -35,12 +38,12 @@ def mysql_connection():
             if connection.is_connected():
                 print("MySQL server is ready for connections.")
                 break
-        except Error as e:
+        except Error:
             print(f"Waiting for MySQL... ({retries} retries left)")
             retries -= 1
             time.sleep(3)
             if retries == 0:
-                raise e
+                raise
 
     cursor = connection.cursor()
 

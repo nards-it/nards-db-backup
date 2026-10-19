@@ -1,10 +1,12 @@
-from flask import Flask, jsonify
-from app.config import Config
-from app.scheduler import Scheduler
 import logging
 import os
-import click
 from pathlib import Path
+
+import click
+from flask import Flask, jsonify
+
+from app.config import Config
+from app.scheduler import Scheduler
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -91,7 +93,9 @@ def restore(name_or_path):
                 f"Attempting to restore database '{restore_db_name}' from latest backup '{backup_file}' for "
                 f"configuration '{restore_cron_name}'"
             )
-            restore_success = db_module.restore_database(restore_db_name, backup_file_path)
+            restore_success = db_module.restore_database(
+                restore_db_name, backup_file_path
+            )
             if restore_success:
                 logger.info(
                     f"Restore successful for configuration '{restore_cron_name}' "

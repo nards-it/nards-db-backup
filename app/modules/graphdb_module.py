@@ -1,7 +1,8 @@
 import logging
 from pathlib import Path
-from typing import List, Optional
 
+import List
+import Optional
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -80,7 +81,7 @@ class GraphDBModule(AbstractModule):
         except requests.exceptions.RequestException as exc:
             logger.error(f"Failed to retrieve repository list from GraphDB: {exc}")
             return []
-        except Exception as exc:
+        except Exception as exc:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(
                 f"An unexpected error occurred while listing GraphDB repositories: {exc}"
             )
@@ -107,12 +108,14 @@ class GraphDBModule(AbstractModule):
             )
 
             destination_file.parent.mkdir(parents=True, exist_ok=True)
-            with self._get(
-                f"/rest/recovery/download/{backup_file_name_on_server}", stream=True
-            ) as download_stream:
-                with destination_file.open("wb") as f_out:
-                    for chunk in download_stream.iter_content(chunk_size=8192):
-                        f_out.write(chunk)
+            with (
+                self._get(
+                    f"/rest/recovery/download/{backup_file_name_on_server}", stream=True
+                ) as download_stream,
+                destination_file.open("wb") as f_out,
+            ):
+                for chunk in download_stream.iter_content(chunk_size=8192):
+                    f_out.write(chunk)
 
             logger.info(
                 f"Backup for repository '{name}' successfully saved to {destination_file}"
@@ -128,14 +131,16 @@ class GraphDBModule(AbstractModule):
                     )
                     destination_file.parent.mkdir(parents=True, exist_ok=True)
                     # Export all statements as N-Triples for broad compatibility
-                    with self._get(
-                        f"/repositories/{name}/statements",
-                        headers={"Accept": "application/n-triples"},
-                        stream=True,
-                    ) as resp:
-                        with destination_file.open("wb") as f_out:
-                            for chunk in resp.iter_content(chunk_size=8192):
-                                f_out.write(chunk)
+                    with (
+                        self._get(
+                            f"/repositories/{name}/statements",
+                            headers={"Accept": "application/n-triples"},
+                            stream=True,
+                        ) as resp,
+                        destination_file.open("wb") as f_out,
+                    ):
+                        for chunk in resp.iter_content(chunk_size=8192):
+                            f_out.write(chunk)
                     logger.info(
                         f"RDF export backup for repository '{name}' saved to {destination_file}"
                     )
@@ -149,7 +154,7 @@ class GraphDBModule(AbstractModule):
                 f"GraphDB backup for repository '{name}' failed during HTTP operation: {exc}"
             )
             return False
-        except Exception as exc:
+        except Exception as exc:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(
                 f"An unexpected error occurred during GraphDB backup for '{name}': {exc}"
             )
@@ -209,7 +214,7 @@ class GraphDBModule(AbstractModule):
                 f"GraphDB restore for repository '{name}' failed during HTTP operation: {exc}"
             )
             return False
-        except Exception as exc:
+        except Exception as exc:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(
                 f"An unexpected error occurred during GraphDB restore for '{name}': {exc}"
             )

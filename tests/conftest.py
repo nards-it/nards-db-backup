@@ -1,5 +1,6 @@
 import os
 import socket
+
 import pytest
 
 
@@ -82,7 +83,7 @@ def ensure_services_for_local(request):
     # Host path to the Redis RDB directory bind-mounted in tests/docker-compose.yml
     try:
         root = str(request.config.rootdir)
-    except Exception:
+    except Exception:  # Catch other unexpected errors  # noqa: BLE001
         root = os.getcwd()
     os.environ.setdefault(
         "REDIS_RDB_HOST_DIR", os.path.join(root, "tests", "redis-data")

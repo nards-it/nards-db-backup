@@ -1,13 +1,22 @@
 import gzip
+import logging
 import shutil
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import List
-import logging
+
+import List
 
 # Configura il logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+
+class UnsupportedMethod(Exception):
+    """Exception raised for custom error scenarios."""
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 
 class AbstractModule(metaclass=ABCMeta):
@@ -113,7 +122,7 @@ class AbstractModule(metaclass=ABCMeta):
         Returns:
             List[str]: A list of database names.
         """
-        raise Exception("Unsupported method")
+        raise UnsupportedMethod("list_all_databases")
 
     def backup_database(self, name: str, destination_file: Path) -> bool:
         """Create a backup, applying gzip when its destination ends in ``.gz``."""
@@ -137,7 +146,7 @@ class AbstractModule(metaclass=ABCMeta):
     @abstractmethod
     def _backup_database(self, name: str, destination_file: Path) -> bool:
         """Implement the database-specific uncompressed backup operation."""
-        raise Exception("Unsupported method")
+        raise UnsupportedMethod("_backup_database")
 
     def restore_database(self, name: str, source_file: Path) -> bool:
         """Restore a backup, transparently expanding gzip files when required."""
@@ -148,7 +157,9 @@ class AbstractModule(metaclass=ABCMeta):
                 source_path = self.decompress_backup(source_path)
                 temporary_file = True
             except (OSError, ValueError) as exc:
-                logger.error(f"Unable to prepare backup '{source_file}' for restore: {exc}")
+                logger.error(
+                    f"Unable to prepare backup '{source_file}' for restore: {exc}"
+                )
                 return False
 
         try:
@@ -168,7 +179,7 @@ class AbstractModule(metaclass=ABCMeta):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        raise Exception("Unsupported method")
+        raise UnsupportedMethod("_restore_database")
 
     def backup_file_name(self, database_name: str, timestamp: str) -> str:
         """Return the standard name for a backup produced at ``timestamp``."""
@@ -182,8 +193,7 @@ class AbstractModule(metaclass=ABCMeta):
     def database_name_from_backup(self, backup_file: Path | str) -> str:
         """Extract the database name from a scheduler-generated backup file."""
         filename = Path(backup_file).name
-        if filename.endswith(".gz"):
-            filename = filename[:-3]
+        filename = filename.removesuffix(".gz")
         return filename.rsplit(".", 2)[0]
 
     def compress_backup(self, backup_file: Path | str) -> Path:
@@ -198,9 +208,8 @@ class AbstractModule(metaclass=ABCMeta):
         backup_path = Path(backup_file)
         gz_file = Path(f"{backup_path}.gz")
         logger.info(f"Compressing backup file {backup_file} to {gz_file}")
-        with backup_path.open("rb") as f_in:
-            with gzip.open(gz_file, "wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+        with backup_path.open("rb") as f_in, gzip.open(gz_file, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
         backup_path.unlink()
         logger.info("Successfully compressed and removed the uncompressed backup file.")
         return gz_file
@@ -217,8 +226,7 @@ class AbstractModule(metaclass=ABCMeta):
 
         backup_file = gz_path.with_suffix("")
         logger.info(f"Decompressing backup file {gz_file} to {backup_file}")
-        with gzip.open(gz_path, "rb") as f_in:
-            with backup_file.open("wb") as f_out:
-                shutil.copyfileobj(f_in, f_out)
+        with gzip.open(gz_path, "rb") as f_in, backup_file.open("wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
         logger.info(f"Successfully decompressed backup file to {backup_file}.")
         return backup_file

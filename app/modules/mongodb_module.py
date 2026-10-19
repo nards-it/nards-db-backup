@@ -1,8 +1,8 @@
-import time
-import subprocess
 import logging
+import subprocess
+import time
 from pathlib import Path
-from typing import List
+
 from pymongo import MongoClient  # Moved import to top
 
 # Import the abstract module that enforces the interface
@@ -64,7 +64,7 @@ class MongoDBModule(AbstractModule):
                 client.server_info()
                 logger.info("Successfully connected to MongoDB.")
                 return client
-            except Exception as e:
+            except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
                 logger.error(f"Error connecting to MongoDB: {e}")
                 wait_time = 5 * attempt
                 logger.info(f"Waiting {wait_time} seconds before next attempt...")
@@ -72,7 +72,7 @@ class MongoDBModule(AbstractModule):
         logger.error("Unable to connect to MongoDB after multiple attempts.")
         return None
 
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all databases on the MongoDB server, excluding system databases.
 
@@ -88,7 +88,7 @@ class MongoDBModule(AbstractModule):
                 system_dbs = ["admin", "local", "config"]
                 filtered = [db for db in databases if db not in system_dbs]
                 return filtered
-            except Exception as e:
+            except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
                 logger.error(f"Error listing MongoDB databases: {e}")
                 return []
             finally:

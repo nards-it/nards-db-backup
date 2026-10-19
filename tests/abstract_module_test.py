@@ -38,9 +38,7 @@ def test_backup_and_restore_are_transparent_to_database_modules(
         "host", "port", "user", "password", "maintenance", file_extension
     )
     backup_file = tmp_path / f"database.20261019120000{file_extension}"
-    uncompressed_file = (
-        backup_file.with_suffix("") if should_compress else backup_file
-    )
+    uncompressed_file = backup_file.with_suffix("") if should_compress else backup_file
 
     assert module.backup_database("database", backup_file)
     assert module.backup_destinations == [uncompressed_file]

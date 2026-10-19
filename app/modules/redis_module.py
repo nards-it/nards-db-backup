@@ -2,8 +2,8 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List
 
+import List
 import redis
 
 from app.modules.abstract_module import AbstractModule
@@ -21,10 +21,10 @@ class RedisModule(AbstractModule):
         self,
         host: str,
         port: str,
-        username: str = None,
-        password: str = None,
-        maintenance_db: str = None,
-        container_name: str = None,
+        username: str | None = None,
+        password: str | None = None,
+        maintenance_db: str | None = None,
+        container_name: str | None = None,
         file_extension: str = ".backup",
     ):
         """
@@ -102,7 +102,7 @@ class RedisModule(AbstractModule):
                 cid, name, ports = parts[0], parts[1], parts[2]
                 if token in ports:
                     return name or cid
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.debug(f"Could not detect Redis container by port {host_port}: {e}")
         return None
 
@@ -239,7 +239,7 @@ class RedisModule(AbstractModule):
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error during backup: {e}")
             return False
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(f"An unexpected error occurred during Redis backup: {e}")
             return False
 
@@ -364,6 +364,6 @@ class RedisModule(AbstractModule):
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error during restore: {e}")
             return False
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(f"An unexpected error occurred during Redis restore: {e}")
             return False

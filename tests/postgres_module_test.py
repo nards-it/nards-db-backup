@@ -1,14 +1,17 @@
 import os
 import sys
 import time
+
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 # insert root directory into python module search path
 sys.path.insert(1, os.getcwd())
 
-import pytest
 from pathlib import Path
+
 import psycopg2
+import pytest
+
 from app.modules.postgres_module import PostgresModule
 
 
@@ -37,12 +40,12 @@ def postgres_connection():
             if connection:
                 print("PostgreSQL server is ready for connections.")
                 break
-        except Exception as e:
+        except Exception:
             print(f"Waiting for PostgreSQL... ({retries} retries left)")
             retries -= 1
             time.sleep(3)
             if retries == 0:
-                raise e
+                raise
 
     # Create databases without a transaction
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)

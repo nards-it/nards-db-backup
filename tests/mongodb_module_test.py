@@ -1,9 +1,11 @@
 import os
 import sys
-import pytest
 import time
-from pymongo import MongoClient
 from pathlib import Path
+
+import pytest
+from pymongo import MongoClient
+
 from app.modules.mongodb_module import MongoDBModule
 
 # Add project root to the path to import application modules
@@ -16,7 +18,7 @@ def _check_mongo_connection(host: str, port: str, user: str, password: str) -> b
         client = MongoClient(uri, serverSelectionTimeoutMS=3000)
         client.admin.command("ping")
         return True
-    except Exception:
+    except Exception:  # Catch other unexpected errors  # noqa: BLE001
         return False
 
 

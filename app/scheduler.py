@@ -1,8 +1,9 @@
+import logging
+import os
+from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
-import os
-import logging
 
 
 class Scheduler:
@@ -64,7 +65,7 @@ class Scheduler:
                 if success:
                     self.cleanup_old_backups(cron_name, db, retention_max)
                 self.health = success
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             self.logger.error(f"Error during backup: {e}")
             self.health = False
 

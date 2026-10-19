@@ -1,10 +1,11 @@
-import psycopg2
-from psycopg2 import Error
-from pathlib import Path
-from typing import List
-import subprocess
 import logging
 import os
+import subprocess
+from pathlib import Path
+
+import List
+import psycopg2
+from psycopg2 import Error
 
 from app.modules.abstract_module import AbstractModule
 from app.modules.postgresql_client import PostgreSQLClientMixin
@@ -200,7 +201,7 @@ class PostgresModule(PostgreSQLClientMixin, AbstractModule):
         except FileNotFoundError:
             logger.error(f"Backup file {source_file} not found.")
             return False
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(
                 f"Unexpected error occurred while restoring database {name}: {e}"
             )

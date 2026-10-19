@@ -1,7 +1,7 @@
-import time
-import os
 import json
 import logging
+import os
+import time
 
 import pytest
 import requests

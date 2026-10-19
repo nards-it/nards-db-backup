@@ -1,10 +1,11 @@
-import psycopg2
-from psycopg2 import Error
-from pathlib import Path
-from typing import List
-import subprocess
 import logging
 import os
+import subprocess
+from pathlib import Path
+
+import List
+import psycopg2
+from psycopg2 import Error
 
 from app.modules.abstract_module import AbstractModule
 from app.modules.postgresql_client import PostgreSQLClientMixin
@@ -128,7 +129,7 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
             logger.warning(
                 f"Database error while retrieving extensions for '{name}': {e}. Proceeding with empty extensions list."
             )
-        except Exception as e:  # Catch other unexpected errors
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.warning(
                 f"Unexpected error while retrieving extensions for '{name}': {e}. Proceeding with empty extensions list."
             )
@@ -162,7 +163,7 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
                 logger.info(
                     f"No additional extensions (beyond PostGIS) were detected for database '{name}' to include in {pre_sql_file}."
                 )
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.warning(
                 f"Failed writing pre-restore SQL script {pre_sql_file} for database '{name}': {e}"
             )
@@ -295,7 +296,7 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
                     # the subsequent pg_restore is likely to fail or result in a corrupted database.
                     # Therefore, we stop the restore process immediately.
                     return False
-                except Exception as e:
+                except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
                     logger.error(
                         f"Unexpected error executing pre-restore SQL script {pre_sql_file}: {e}"
                     )
@@ -351,7 +352,7 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
         except FileNotFoundError:
             logger.error(f"Backup file {source_file} not found.")
             return False
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(
                 f"Unexpected error occurred while restoring database {name}: {e}"
             )

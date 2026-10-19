@@ -5,10 +5,16 @@ import time
 # insert root directory into python module search path
 sys.path.insert(1, os.getcwd())
 
-import pytest
+import logging
 from pathlib import Path
+
+import pytest
 import redis
+
 from app.modules.redis_module import RedisModule
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def _check_redis_connection(host, port, password=None):
@@ -18,7 +24,7 @@ def _check_redis_connection(host, port, password=None):
         )
         r.ping()
         return True
-    except Exception:
+    except Exception:  # Catch other unexpected errors  # noqa: BLE001
         return False
 
 
@@ -44,8 +50,8 @@ def redis_env(pytestconfig):
     }
     try:
         client.flushall()
-    except Exception:
-        pass
+    except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
+        logger.info(e)
 
 
 @pytest.fixture
@@ -102,9 +108,9 @@ def test_backup_and_restore_database(pytestconfig, redis_module, redis_env):
         # 5. Restart Redis by SHUTDOWN NOSAVE; rely on restart policy
         try:
             client.execute_command("SHUTDOWN", "NOSAVE")
-        except Exception:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             # Connection drop expected
-            pass
+            logger.info(e)
 
         # Wait for Redis to come back
         host, port, password = (
@@ -135,5 +141,5 @@ def test_backup_and_restore_database(pytestconfig, redis_module, redis_env):
         try:
             client.config_set("save", "900 1 300 10 60 10000")
             client.flushall()
-        except Exception:
-            pass
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
+            logger.info(e)

@@ -19,7 +19,7 @@ def _pg_ready(host: str, port: int, user: str, password: str, dbname: str) -> bo
         )
         conn.close()
         return True
-    except Exception:
+    except Exception:  # Catch other unexpected errors  # noqa: BLE001
         return False
 
 

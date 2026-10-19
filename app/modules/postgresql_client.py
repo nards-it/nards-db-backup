@@ -1,7 +1,6 @@
 import logging
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +37,9 @@ class PostgreSQLClientMixin:
 
         connection = self._connect()
         if connection is None:
-            raise RuntimeError("Unable to connect to PostgreSQL to determine its version.")
+            raise RuntimeError(
+                "Unable to connect to PostgreSQL to determine its version."
+            )
         try:
             major = connection.server_version // 10000
         finally:

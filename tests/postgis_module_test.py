@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from app.modules.postgis_module import PostGISModule
@@ -8,9 +9,10 @@ from app.modules.postgis_module import PostGISModule
 # insert root directory into python module search path
 sys.path.insert(1, os.getcwd())
 
-import pytest
 from pathlib import Path
+
 import psycopg2
+import pytest
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -38,12 +40,12 @@ def postgis_connection():
             if connection:
                 print("PostGIS server is ready for connections.")
                 break
-        except Exception as e:
+        except Exception:
             print(f"Waiting for PostGIS... ({retries} retries left)")
             retries -= 1
             time.sleep(3)
             if retries == 0:
-                raise e
+                raise
 
     # Create databases without a transaction
     connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)

@@ -1,7 +1,7 @@
-import os
 import json
-from pathlib import Path
 import logging
+import os
+from pathlib import Path
 
 # Setup logging for configuration module
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class Config:
     try:
         cron_configs = json.loads(CRON_CONFIGS)
         if not isinstance(cron_configs, list):
-            raise ValueError("CRON_CONFIGS must be a list of dictionaries.")
+            raise TypeError("CRON_CONFIGS must be a list of dictionaries.")
         for config in cron_configs:
             if "cron" not in config:
                 raise ValueError("Each configuration must contain a 'cron' key.")
