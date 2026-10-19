@@ -36,6 +36,7 @@ db_module = DatabaseModule(
     username=Config.DB_USER,
     password=Config.DB_PASSWORD,
     maintenance_db=Config.DB_MAINTENANCE_NAME,
+    file_extension=Config.BACKUP_FILE_EXTENSION,
 )
 
 # Initialize the scheduler with multiple cron configurations
@@ -65,9 +66,7 @@ def restore(name_or_path):
     if os.path.exists(name_or_path):
         # If a file path is provided
         backup_path = Path(name_or_path)
-        restore_db_name = backup_path.name.rsplit(".", 1)[
-            0
-        ]  # Extract the database name from the file name
+        restore_db_name = db_module.database_name_from_backup(backup_path)
         logger.info(
             f"Attempting to restore database '{restore_db_name}' from file '{name_or_path}'"
         )
@@ -81,20 +80,18 @@ def restore(name_or_path):
         restore_cron_name = name_or_path
         restore_backup_dir = Config.BACKUP_DIR / restore_cron_name
         backup_file = max(
-            restore_backup_dir.glob("**/*.backup"), key=os.path.getmtime, default=None
+            restore_backup_dir.glob(db_module.backup_file_glob()),
+            key=os.path.getmtime,
+            default=None,
         )
         if backup_file:
             backup_file_path = Path(backup_file)
-            restore_db_name = backup_file_path.name.rsplit(".", 1)[
-                0
-            ]  # Extract the database name from the file name
+            restore_db_name = db_module.database_name_from_backup(backup_file_path)
             logger.info(
                 f"Attempting to restore database '{restore_db_name}' from latest backup '{backup_file}' for "
                 f"configuration '{restore_cron_name}'"
             )
-            restore_success = db_module.restore_database(
-                restore_db_name, backup_file_path
-            )
+            restore_success = db_module.restore_database(restore_db_name, backup_file_path)
             if restore_success:
                 logger.info(
                     f"Restore successful for configuration '{restore_cron_name}' "
@@ -120,14 +117,14 @@ def run_app(start_server: bool = True) -> None:
         cron_name = Config.RESTORE_CONFIG_NAME
         backup_dir = Config.BACKUP_DIR / cron_name
         latest_backup = max(
-            backup_dir.glob("**/*.backup"), key=os.path.getmtime, default=None
+            backup_dir.glob(db_module.backup_file_glob()),
+            key=os.path.getmtime,
+            default=None,
         )
         logger.info(f"Detected latest backup: {latest_backup}")
         if latest_backup:
             latest_backup_path = Path(latest_backup)
-            db_name = latest_backup_path.name.rsplit(".", 2)[
-                0
-            ]  # Extract the database name from the file name
+            db_name = db_module.database_name_from_backup(latest_backup_path)
             logger.info(
                 f"Attempting to restore database '{db_name}' from latest backup '{latest_backup}' for "
                 f"configuration '{cron_name}' at startup"

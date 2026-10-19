@@ -84,7 +84,9 @@ class Scheduler:
             self.backup_dir / cron_name / str(now.year) / str(now.month) / str(now.day)
         )
         backup_path.mkdir(parents=True, exist_ok=True)
-        backup_file = backup_path / f"{db_name}.{now.strftime('%Y%m%d%H%M%S')}.backup"
+        backup_file = backup_path / self.db_module.backup_file_name(
+            db_name, now.strftime("%Y%m%d%H%M%S")
+        )
         self.logger.info(f"Calculated backup file path: {backup_file}")
         return backup_file
 
@@ -98,7 +100,7 @@ class Scheduler:
             retention_max (int): The maximum number of backups to retain.
         """
         db_backup_dir = self.backup_dir / cron_name
-        all_backups = list(db_backup_dir.glob(f"**/{db_name}.*.backup"))
+        all_backups = list(db_backup_dir.glob(self.db_module.backup_file_glob(db_name)))
         all_backups.sort(key=os.path.getmtime, reverse=True)
         self.logger.info(
             f"Cleaning up old backups on '{cron_name}' for '{db_name}' db, keeping the latest {retention_max} backups"

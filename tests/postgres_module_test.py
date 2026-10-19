@@ -94,6 +94,15 @@ def test_list_all_databases(postgres_module):
     assert "test_db" in result
 
 
+def test_uses_client_matching_connected_postgres_server(postgres_module):
+    """The client path is selected from the actual server version at runtime."""
+    server_major = postgres_module._postgres_server_major()
+    pg_dump = Path(postgres_module._postgres_client("pg_dump"))
+
+    assert pg_dump.parts[-3] == str(server_major)
+    assert pg_dump.name == "pg_dump"
+
+
 def test_backup_and_restore_database(pytestconfig, postgres_module):
     """
     Tests the full backup and restore cycle for a PostgreSQL database.

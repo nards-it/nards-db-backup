@@ -29,6 +29,7 @@ class GraphDBModule(AbstractModule):
         password: Optional[str] = None,
         maintenance_db: str = "",  # Ignored by GraphDBModule, kept for super() compatibility
         timeout: int = 60,
+        file_extension: str = ".backup",
     ):
         """
         Initializes the GraphDBModule with connection details and API settings.
@@ -41,7 +42,9 @@ class GraphDBModule(AbstractModule):
             maintenance_db (str): Not used by GraphDB, kept for compatibility with AbstractModule.
             timeout (int): Timeout in seconds for HTTP requests to GraphDB.
         """
-        super().__init__(host, port, username, password, maintenance_db or "")
+        super().__init__(
+            host, port, username, password, maintenance_db or "", file_extension
+        )
         self._base = f"http://{self._host}:{self._port}"
         self._auth = (
             HTTPBasicAuth(username, password) if username and password else None
@@ -83,7 +86,7 @@ class GraphDBModule(AbstractModule):
             )
             return []
 
-    def backup_database(self, name: str, destination_file: Path) -> bool:
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
         """
         Creates a backup of the specified GraphDB repository and saves it as a ZIP file.
 
@@ -152,7 +155,7 @@ class GraphDBModule(AbstractModule):
             )
             return False
 
-    def restore_database(self, name: str, source_file: Path) -> bool:
+    def _restore_database(self, name: str, source_file: Path) -> bool:
         """
         Restores a GraphDB repository from a backup ZIP file.
 

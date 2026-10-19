@@ -21,7 +21,13 @@ class PostgresModule(PostgreSQLClientMixin, AbstractModule):
     """
 
     def __init__(
-        self, host: str, port: str, username: str, password: str, maintenance_db: str
+        self,
+        host: str,
+        port: str,
+        username: str,
+        password: str,
+        maintenance_db: str,
+        file_extension: str = ".backup",
     ):
         """
         Initializes the PostgresModule with connection details.
@@ -32,7 +38,7 @@ class PostgresModule(PostgreSQLClientMixin, AbstractModule):
             username (str): The username to connect to the PostgreSQL server.
             password (str): The password to connect to the PostgreSQL server.
         """
-        super().__init__(host, port, username, password, maintenance_db)
+        super().__init__(host, port, username, password, maintenance_db, file_extension)
 
     def _connect(self):
         """
@@ -82,7 +88,7 @@ class PostgresModule(PostgreSQLClientMixin, AbstractModule):
             logger.error("Unknown error connecting to database.")
             return []
 
-    def backup_database(self, name: str, destination_file: Path) -> bool:
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
         """
         Backs up the specified database to a file.
 
@@ -116,7 +122,7 @@ class PostgresModule(PostgreSQLClientMixin, AbstractModule):
             logger.error(f"Error backing up database {name}: {e}")
             return False
 
-    def restore_database(self, name: str, source_file: Path) -> bool:
+    def _restore_database(self, name: str, source_file: Path) -> bool:
         """
         Restores the specified PostgreSQL database from a backup file.
 

@@ -106,8 +106,11 @@ def test_backup_and_restore_database(pytestconfig, postgis_module):
 
     # Percorso del file di backup
     backup_file = Path(str(pytestconfig.rootdir), "tests", "test_postgis_db_backup.sql")
+    pre_restore_file = backup_file.with_suffix(".pre.sql")
     if backup_file.exists():
         os.remove(backup_file)
+    if pre_restore_file.exists():
+        os.remove(pre_restore_file)
     try:
         # Setup: connessione al database
         connection = psycopg2.connect(
@@ -172,3 +175,5 @@ def test_backup_and_restore_database(pytestconfig, postgis_module):
     finally:
         if backup_file.exists():
             os.remove(backup_file)
+        if pre_restore_file.exists():
+            os.remove(pre_restore_file)

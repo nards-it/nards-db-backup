@@ -25,6 +25,7 @@ class RedisModule(AbstractModule):
         password: str = None,
         maintenance_db: str = None,
         container_name: str = None,
+        file_extension: str = ".backup",
     ):
         """
         Initializes the Redis module.
@@ -38,7 +39,7 @@ class RedisModule(AbstractModule):
             container_name (str, optional): The name or ID of the Docker container running Redis.
                                             Used for `docker cp` operations if Redis is containerized. Defaults to None.
         """
-        super().__init__(host, port, username, password, maintenance_db)
+        super().__init__(host, port, username, password, maintenance_db, file_extension)
         # maintenance_db is not strictly applicable to Redis in the same way as SQL.
         # Username is also less common for Redis connection strings directly in redis-py prior to 6.0 if not using ACLs.
         self.redis_client = redis.Redis(
@@ -120,7 +121,7 @@ class RedisModule(AbstractModule):
             logger.error(f"Could not connect to Redis to list databases: {e}")
             return []
 
-    def backup_database(self, name: str, destination_file: Path) -> bool:
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
         """
         Backs up the Redis database (RDB snapshot).
         The 'name' parameter is mostly a placeholder for Redis as we backup the whole instance.
@@ -242,7 +243,7 @@ class RedisModule(AbstractModule):
             logger.error(f"An unexpected error occurred during Redis backup: {e}")
             return False
 
-    def restore_database(self, name: str, source_file: Path) -> bool:
+    def _restore_database(self, name: str, source_file: Path) -> bool:
         """
         Restores the Redis database from an RDB backup file.
         The 'name' parameter is mostly a placeholder.

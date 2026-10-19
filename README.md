@@ -41,6 +41,7 @@ Configure the application via environment variables. Create a `.env` file with t
 - `DB_TYPE=mysql|postgres|postgis|redis|mongodb|graphdb`
   - GraphDB: `DB_PORT` is typically `7200`. `DB_USER` and `DB_PASSWORD` can often be left empty for GraphDB Free if security is disabled.
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
+- `BACKUP_FILE_EXTENSION=.backup` # Set to `.backup.gz` to compress backups
 - `RESTORE_CONFIG_NAME=""`
 
 ### GraphDB Notes
@@ -78,6 +79,7 @@ services:
       DB_MAINTENANCE_NAME: 'mydatabase' # For SQL databases; for Redis, typically not used or set to 0 for the default DB., for MongoDB often 'admin'
       DB_TYPE: 'postgres' # postgres/postgis/mysql/mongodb/redis/graphdb
       BACKUP_DIR: /backups
+      # BACKUP_FILE_EXTENSION: '.backup.gz' # Default: .backup (uncompressed)
       CRON_CONFIGS: '[{"cron": "0 * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
       # RESTORE_CONFIG_NAME: 'hourly' # When you have to restore some content
     volumes:

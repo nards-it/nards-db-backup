@@ -23,6 +23,11 @@ class Config:
     # Backup configurations
     CRON_CONFIGS = os.getenv("CRON_CONFIGS", "0 0 * * *")
     BACKUP_DIR = Path("/backups")
+    BACKUP_FILE_EXTENSION = os.getenv("BACKUP_FILE_EXTENSION", ".backup")
+    if not BACKUP_FILE_EXTENSION.startswith(".") or BACKUP_FILE_EXTENSION == ".":
+        raise ValueError(
+            "BACKUP_FILE_EXTENSION must start with a dot and include an extension."
+        )
 
     # Restore settings
     RESTORE_CONFIG_NAME = os.getenv("RESTORE_CONFIG_NAME", "")
@@ -58,5 +63,6 @@ class Config:
     logger.info(f"DB_NAME: {DB_MAINTENANCE_NAME}")
     logger.info(f"DB_TYPE: {DB_TYPE}")
     logger.info(f"BACKUP_DIR: {BACKUP_DIR}")
+    logger.info(f"BACKUP_FILE_EXTENSION: {BACKUP_FILE_EXTENSION}")
     logger.info(f"CRON_CONFIGS: {CRON_CONFIGS}")
     logger.info(f"RESTORE_CONFIG_NAME: {RESTORE_CONFIG_NAME}")

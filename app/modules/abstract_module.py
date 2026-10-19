@@ -1,5 +1,4 @@
 import gzip
-import os
 import shutil
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
@@ -18,7 +17,13 @@ class AbstractModule(metaclass=ABCMeta):
     """
 
     def __init__(
-        self, host: str, port: str, username: str, password: str, maintenance_db: str
+        self,
+        host: str,
+        port: str,
+        username: str,
+        password: str,
+        maintenance_db: str,
+        file_extension: str = ".backup",
     ):
         """
         Initializes the database module with connection details.
@@ -29,13 +34,16 @@ class AbstractModule(metaclass=ABCMeta):
             username (str): The username to connect to the database.
             password (str): The password to connect to the database.
             maintenance_db (str): The name of the database used for maintenance.
+            file_extension (str): Extension used for generated backup files.
         """
         self._host = host
         self._port = port
         self._username = username
         self._password = password
         self._maintenance_db = maintenance_db
-        self._file_extension = '.backup'
+        if not file_extension.startswith(".") or file_extension == ".":
+            raise ValueError("Backup file extension must start with a dot.")
+        self._file_extension = file_extension
 
     @property
     def host(self) -> str:
@@ -107,24 +115,51 @@ class AbstractModule(metaclass=ABCMeta):
         """
         raise Exception("Unsupported method")
 
-    @abstractmethod
     def backup_database(self, name: str, destination_file: Path) -> bool:
-        """
-        Backs up the specified database to a file.
+        """Create a backup, applying gzip when its destination ends in ``.gz``."""
+        destination_path = Path(destination_file)
+        uncompressed_path = (
+            destination_path.with_suffix("")
+            if destination_path.name.endswith(".gz")
+            else destination_path
+        )
+        success = self._backup_database(name, uncompressed_path)
+        if not success or not destination_path.name.endswith(".gz"):
+            return success
 
-        Args:
-            name (str): The name of the database to back up.
-            destination_file (Path): The path to the file where the backup will be stored.
+        try:
+            self.compress_backup(uncompressed_path)
+            return True
+        except OSError as exc:
+            logger.error(f"Error compressing backup '{uncompressed_path}': {exc}")
+            return False
 
-        Returns:
-            bool: True if the backup was successful, False otherwise.
-        """
+    @abstractmethod
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
+        """Implement the database-specific uncompressed backup operation."""
         raise Exception("Unsupported method")
 
-    @abstractmethod
     def restore_database(self, name: str, source_file: Path) -> bool:
-        """
-        Restores the specified database from a backup file.
+        """Restore a backup, transparently expanding gzip files when required."""
+        source_path = Path(source_file)
+        temporary_file = False
+        if source_path.name.endswith(".gz"):
+            try:
+                source_path = self.decompress_backup(source_path)
+                temporary_file = True
+            except (OSError, ValueError) as exc:
+                logger.error(f"Unable to prepare backup '{source_file}' for restore: {exc}")
+                return False
+
+        try:
+            return self._restore_database(name, source_path)
+        finally:
+            if temporary_file and source_path.exists():
+                source_path.unlink()
+
+    @abstractmethod
+    def _restore_database(self, name: str, source_file: Path) -> bool:
+        """Implement the database-specific uncompressed restore operation.
 
         Args:
             name (str): The name of the database to restore.
@@ -135,22 +170,55 @@ class AbstractModule(metaclass=ABCMeta):
         """
         raise Exception("Unsupported method")
 
-    def compress_backup(self, backup_file):
-        """Compress the backup file using GZ compression."""
-        gz_file = f"{backup_file}.gz"
-        logger.info(f"Compressing backup file {backup_file} to {gz_file}")
-        with open(backup_file, 'rb') as f_in:
-            with gzip.open(gz_file, 'wb') as f_out:
-                shutil.copyfileobj(f_in, f_out)
-        os.remove(backup_file)  # Remove the uncompressed backup file
-        logger.info(f"Successfully compressed and removed the uncompressed backup file.")
+    def backup_file_name(self, database_name: str, timestamp: str) -> str:
+        """Return the standard name for a backup produced at ``timestamp``."""
+        return f"{database_name}.{timestamp}{self.file_extension}"
 
-    def decompress_backup(self, gz_file):
-        """Decompress the GZ file to restore the original backup file."""
-        backup_file = gz_file[:-3]  # Remove the .gz extension
+    def backup_file_glob(self, database_name: str | None = None) -> str:
+        """Return the glob used to find this module's backup files."""
+        database_pattern = f"{database_name}.*" if database_name else "*"
+        return f"**/{database_pattern}{self.file_extension}"
+
+    def database_name_from_backup(self, backup_file: Path | str) -> str:
+        """Extract the database name from a scheduler-generated backup file."""
+        filename = Path(backup_file).name
+        if filename.endswith(".gz"):
+            filename = filename[:-3]
+        return filename.rsplit(".", 2)[0]
+
+    def compress_backup(self, backup_file: Path | str) -> Path:
+        """Compress a backup and remove its uncompressed source file.
+
+        Args:
+            backup_file: Path of the uncompressed backup.
+
+        Returns:
+            The path of the generated ``.gz`` file.
+        """
+        backup_path = Path(backup_file)
+        gz_file = Path(f"{backup_path}.gz")
+        logger.info(f"Compressing backup file {backup_file} to {gz_file}")
+        with backup_path.open("rb") as f_in:
+            with gzip.open(gz_file, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        backup_path.unlink()
+        logger.info("Successfully compressed and removed the uncompressed backup file.")
+        return gz_file
+
+    def decompress_backup(self, gz_file: Path | str) -> Path:
+        """Decompress a ``.gz`` backup and return the restored file path.
+
+        The compressed source file is deliberately retained, so it can remain in
+        the backup archive after a restore.
+        """
+        gz_path = Path(gz_file)
+        if gz_path.suffix != ".gz":
+            raise ValueError(f"Compressed backup must have a .gz extension: {gz_path}")
+
+        backup_file = gz_path.with_suffix("")
         logger.info(f"Decompressing backup file {gz_file} to {backup_file}")
-        with gzip.open(gz_file, 'rb') as f_in:
-            with open(backup_file, 'wb') as f_out:
+        with gzip.open(gz_path, "rb") as f_in:
+            with backup_file.open("wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
         logger.info(f"Successfully decompressed backup file to {backup_file}.")
         return backup_file

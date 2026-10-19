@@ -31,6 +31,12 @@ class _FakeDB:
         self.restore_args = (name, Path(source_file))
         return True
 
+    def backup_file_glob(self):
+        return "**/*.backup"
+
+    def database_name_from_backup(self, backup_file):
+        return Path(backup_file).name.rsplit(".", 2)[0]
+
 
 class _FakeScheduler:
     def __init__(self, calls):

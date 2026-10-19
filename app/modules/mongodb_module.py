@@ -20,7 +20,13 @@ class MongoDBModule(AbstractModule):
     """
 
     def __init__(
-        self, host: str, port: str, username: str, password: str, maintenance_db: str
+        self,
+        host: str,
+        port: str,
+        username: str,
+        password: str,
+        maintenance_db: str,
+        file_extension: str = ".backup",
     ):
         """
         Initializes the MongoDBModule with connection details.
@@ -32,7 +38,7 @@ class MongoDBModule(AbstractModule):
             password (str): The password to connect to the MongoDB server.
             maintenance_db (str): Maintenance database used for connection verification.
         """
-        super().__init__(host, port, username, password, maintenance_db)
+        super().__init__(host, port, username, password, maintenance_db, file_extension)
 
     def _connect(self):
         """
@@ -92,13 +98,13 @@ class MongoDBModule(AbstractModule):
             logger.error("Failed to connect to MongoDB.")
             return []
 
-    def backup_database(self, name: str, destination_file: Path) -> bool:
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
         """
         Performs a backup of the specified MongoDB database using the 'mongodump' utility.
 
         Utilizes:
           - the --archive option to create a single backup file
-          - the --gzip option to compress the dump
+          - an uncompressed archive, so compression is controlled by the scheduler
 
         Args:
             name (str): The name of the database to back up.
@@ -116,7 +122,6 @@ class MongoDBModule(AbstractModule):
             f"--db={name}",
             "--authenticationDatabase=admin",
             f"--archive={destination_file}",
-            "--gzip",
         ]
         try:
             process = subprocess.run(
@@ -136,7 +141,7 @@ class MongoDBModule(AbstractModule):
             )
             return False
 
-    def restore_database(self, name: str, source_file: Path) -> bool:
+    def _restore_database(self, name: str, source_file: Path) -> bool:
         """
         Restores the specified MongoDB database using the 'mongorestore' utility.
 
@@ -160,7 +165,6 @@ class MongoDBModule(AbstractModule):
             "--authenticationDatabase=admin",
             "--drop",
             f"--archive={source_file}",
-            "--gzip",
         ]
         try:
             process = subprocess.run(
