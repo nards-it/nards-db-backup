@@ -3,7 +3,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import List
 import redis
 
 from app.modules.abstract_module import AbstractModule
@@ -106,7 +105,7 @@ class RedisModule(AbstractModule):
             logger.debug(f"Could not detect Redis container by port {host_port}: {e}")
         return None
 
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all "databases" in Redis.
         For Redis, this typically means the single dataset or configured databases.

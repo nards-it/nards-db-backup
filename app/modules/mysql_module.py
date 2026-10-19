@@ -4,7 +4,6 @@ import subprocess
 import time
 from pathlib import Path
 
-import List
 import mysql.connector
 from mysql.connector import Error
 
@@ -69,12 +68,12 @@ class MySQLModule(AbstractModule):
 
         logger.error("Error connecting to MySQL database, no more attempts.")
 
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all databases in the MySQL server.
 
         Returns:
-            List[str]: A list of database names.
+            list[str]: A list of database names.
         """
         connection = self._connect()
         if connection:

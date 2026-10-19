@@ -77,7 +77,7 @@ class MongoDBModule(AbstractModule):
         Lists all databases on the MongoDB server, excluding system databases.
 
         Returns:
-            List[str]: A list of non-system database names.
+            list[str]: A list of non-system database names.
         """
         client = self._connect()
         if client:

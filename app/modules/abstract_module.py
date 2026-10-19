@@ -4,8 +4,6 @@ import shutil
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
 
-import List
-
 # Configura il logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -115,12 +113,12 @@ class AbstractModule(metaclass=ABCMeta):
         return self._file_extension
 
     @abstractmethod
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all databases in the database server.
 
         Returns:
-            List[str]: A list of database names.
+            list[str]: A list of database names.
         """
         raise UnsupportedMethod("list_all_databases")
 

@@ -3,7 +3,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import List
 import psycopg2
 from psycopg2 import Error
 
@@ -62,12 +61,12 @@ class PostgresModule(PostgreSQLClientMixin, AbstractModule):
             logger.error(f"Error connecting to PostgreSQL database: {e}")
             return None
 
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all databases in the PostgreSQL server.
 
         Returns:
-            List[str]: A list of database names.
+            list[str]: A list of database names.
         """
         connection = self._connect()
         if connection:

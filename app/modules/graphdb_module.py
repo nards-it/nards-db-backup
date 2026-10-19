@@ -1,8 +1,6 @@
 import logging
 from pathlib import Path
 
-import List
-import Optional
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -26,8 +24,8 @@ class GraphDBModule(AbstractModule):
         self,
         host: str,
         port: str,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str | None = None,
+        password: str | None = None,
         maintenance_db: str = "",  # Ignored by GraphDBModule, kept for super() compatibility
         timeout: int = 60,
         file_extension: str = ".backup",
@@ -66,12 +64,12 @@ class GraphDBModule(AbstractModule):
         return r
 
     # Public API
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all repository IDs present on the GraphDB server.
 
         Returns:
-            List[str]: A list of repository IDs. Returns an empty list on failure.
+            list[str]: A list of repository IDs. Returns an empty list on failure.
         """
         try:
             data = self._get("/rest/repositories").json()
