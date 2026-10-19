@@ -7,13 +7,14 @@ import logging
 import os
 
 from app.modules.abstract_module import AbstractModule
+from app.modules.postgresql_client import PostgreSQLClientMixin
 
 # Configura il logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-class PostgresModule(AbstractModule):
+class PostgresModule(PostgreSQLClientMixin, AbstractModule):
     """
     Concrete implementation of AbstractModule for PostgreSQL databases,
     providing methods for listing, backing up, and restoring databases.
@@ -92,11 +93,17 @@ class PostgresModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
+        try:
+            pg_dump = self._postgres_client("pg_dump")
+        except RuntimeError as exc:
+            logger.error("Cannot select PostgreSQL client for backup: %s", exc)
+            return False
+
         clean_param = ""
         if os.environ.get("PG_RESTORE_CLEAN") == "true":
             clean_param = "--no-owner --no-privileges"
         command = (
-            f"pg_dump {clean_param} --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
+            f"{pg_dump} {clean_param} --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
             f" {destination_file}"
         )
         try:
@@ -121,21 +128,28 @@ class PostgresModule(AbstractModule):
             bool: True if the restore was successful, False otherwise.
         """
 
+        try:
+            psql = self._postgres_client("psql")
+            pg_restore = self._postgres_client("pg_restore")
+        except RuntimeError as exc:
+            logger.error("Cannot select PostgreSQL client for restore: %s", exc)
+            return False
+
         # Set environment variable for password
         env = {"PGPASSWORD": self._password}
 
         drop_command = (
-            f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d postgres "
             f"-c 'DROP DATABASE IF EXISTS {name};'"
         )
         create_command = (
-            f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d postgres "
             f"-c 'CREATE DATABASE {name};'"
         )
         clean_param = ""
         if os.environ.get("PG_RESTORE_CLEAN") == "true":
             clean_param = "--clean --if-exists"
-        restore_command = f"pg_restore {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
+        restore_command = f"{pg_restore} {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
 
         try:
             # Drop the database

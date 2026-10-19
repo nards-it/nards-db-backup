@@ -7,13 +7,14 @@ import logging
 import os
 
 from app.modules.abstract_module import AbstractModule
+from app.modules.postgresql_client import PostgreSQLClientMixin
 
 # Configura il logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-class PostGISModule(AbstractModule):
+class PostGISModule(PostgreSQLClientMixin, AbstractModule):
     """
     Concrete implementation of AbstractModule for PostgreSQL databases with PostGIS,
     providing methods for listing, backing up, and restoring databases.
@@ -92,6 +93,12 @@ class PostGISModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
+        try:
+            pg_dump = self._postgres_client("pg_dump")
+        except RuntimeError as exc:
+            logger.error("Cannot select PostgreSQL client for backup: %s", exc)
+            return False
+
         # Capture used extensions
         extensions = []
         conn_ext = None
@@ -160,7 +167,7 @@ class PostGISModule(AbstractModule):
             dump_extra = "--no-owner --no-privileges"
 
         command = (
-            f"pg_dump {dump_extra} --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} "
+            f"{pg_dump} {dump_extra} --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} "
             f"-d {name} -F c -b -v -f {destination_file}"
         )
         try:
@@ -185,25 +192,32 @@ class PostGISModule(AbstractModule):
             bool: True if the restore was successful, False otherwise.
         """
 
+        try:
+            psql = self._postgres_client("psql")
+            pg_restore = self._postgres_client("pg_restore")
+        except RuntimeError as exc:
+            logger.error("Cannot select PostgreSQL client for restore: %s", exc)
+            return False
+
         # Set environment variable for password
         env = {"PGPASSWORD": self._password}
 
         drop_command = (
-            f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d postgres "
             f"-c 'DROP DATABASE IF EXISTS {name};'"
         )
         create_command = (
-            f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d postgres "
             f"-c 'CREATE DATABASE {name};'"
         )
         enable_postgis_command = (
-            f"psql -h {self._host} -p {self._port} -U {self._username} -d {name} "
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d {name} "
             f"-c 'CREATE EXTENSION postgis;'"
         )
         clean_param = ""
         if os.environ.get("PG_RESTORE_CLEAN") == "true":
             clean_param = "--clean --if-exists"
-        restore_command = f"pg_restore {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
+        restore_command = f"{pg_restore} {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
 
         try:
             # Drop the database
@@ -236,7 +250,7 @@ class PostGISModule(AbstractModule):
                 )
                 try:
                     execute_pre_sql_command = (
-                        f"psql -h {self._host} -p {self._port} -U {self._username} "
+                        f"{psql} -h {self._host} -p {self._port} -U {self._username} "
                         f'-d "{name}" -f "{pre_sql_file}"'
                     )
                     # Capture output for better logging, especially errors
@@ -291,7 +305,7 @@ class PostGISModule(AbstractModule):
                 # Fallback to ensure at least PostGIS is present (dev behavior)
                 try:
                     enable_postgis_command = (
-                        f"psql -h {self._host} -p {self._port} -U {self._username} -d {name} "
+                        f"{psql} -h {self._host} -p {self._port} -U {self._username} -d {name} "
                         f"-c 'CREATE EXTENSION IF NOT EXISTS postgis;'"
                     )
                     subprocess.run(
