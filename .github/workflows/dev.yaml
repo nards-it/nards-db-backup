@@ -1,4 +1,4 @@
-name: Main Workflow
+name: Dev Workflow
 
 on:
   push:
@@ -29,6 +29,6 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ vars.DOCKERHUB_REPOSITORY }}:dev

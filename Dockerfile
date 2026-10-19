@@ -43,8 +43,12 @@ RUN apt-get update && \
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg && \
     apt-get update && \
     apt-get install -y --no-install-recommends gnupg curl ca-certificates && \
-    curl -fsSLo /tmp/mongodb-database-tools.deb \
-    https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian13-x86_64-100.19.1.deb && \
+    case "$(dpkg --print-architecture)" in \
+      amd64) mongodb_tools_url=https://fastdl.mongodb.org/tools/db/mongodb-database-tools-debian13-x86_64-100.19.1.deb ;; \
+      arm64) mongodb_tools_url=https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-arm64-100.19.1.deb ;; \
+      *) echo "Unsupported architecture for MongoDB Database Tools: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac && \
+    curl -fsSLo /tmp/mongodb-database-tools.deb "$mongodb_tools_url" && \
     apt-get install -y --no-install-recommends \
     dumb-init \
     mariadb-client \
