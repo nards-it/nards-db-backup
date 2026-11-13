@@ -46,9 +46,11 @@ Configure the application via environment variables. Create a `.env` file with t
 
 ### GraphDB Notes
 
-- Uses GraphDB recovery endpoints when available (Enterprise). With GraphDB Free, it transparently falls back to RDF export/import (N‑Triples) for backup/restore.
+- GraphDB Free backups contain explicit RDF statements in N-Quads, including named graphs. They do not contain repository configuration, namespace settings, user accounts, or other instance-level data. Keep those separately; the destination repository must already exist with a compatible configuration.
+- Restore first saves the existing explicit RDF statements in a `.graphdb-recovery-*` directory next to the backup, then clears the repository and imports the requested backup. If import fails, it attempts to clear the repository again and restore that snapshot. Blank nodes and named graphs are supported.
+- This restore is not atomic: stop other writes and expect the repository to be temporarily empty or incomplete. The backup directory must be writable and have enough space for the existing data. If recovery also fails or the process is interrupted, the snapshot and its `metadata.json` remain in the recovery directory for manual recovery; check the logs and repository state before retrying. Store backups on persistent storage if the container may be replaced. A lost HTTP response can leave the operation outcome uncertain.
 - GraphDB data lives in repositories. The scheduler backs up every repository returned by `GET /rest/repositories`.
-- Default port is `7200`. Provide `DB_USER`/`DB_PASSWORD` only if security is enabled in your GraphDB instance.
+- Set `DB_PORT=7200` for the usual GraphDB port. Provide `DB_USER`/`DB_PASSWORD` only if security is enabled in your GraphDB instance.
 
 ### CRON_CONFIGS
 
@@ -185,7 +187,7 @@ You can run the test suite in two ways, either mirroring the CI pipeline with Do
   
 - MongoDB note: the service is named `mongodb` in `docker-compose.quickstart.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
 
-- GraphDB note: the test stack includes a `graphdb` service (GraphDB Free). The GraphDB module prefers enterprise recovery endpoints when available; with GraphDB Free, it transparently falls back to RDF export/import (N‑Triples) for backup/restore. Port defaults to `7200`.
+- GraphDB note: the test stack includes a `graphdb` service (GraphDB Free). The GraphDB module exports and restores explicit RDF data as N-Quads. Set `DB_PORT` to `7200` for the test service.
 
 ### Local venv + pytest
 

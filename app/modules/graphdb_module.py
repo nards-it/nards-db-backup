@@ -1,5 +1,9 @@
+import json
 import logging
+import shutil
+import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -11,13 +15,9 @@ logger = logging.getLogger(__name__)
 
 class GraphDBModule(AbstractModule):
     """
-    REST adapter for Ontotext GraphDB.
+    RDF data backup and restore for GraphDB Free using the RDF4J API.
 
-    Endpoints used (GraphDB ≥ 9.4):
-      - GET  /rest/repositories
-      - POST /rest/recovery/backup/{id}
-      - GET  /rest/recovery/download/{file}
-      - POST /rest/recovery/restore/{id}
+    Repository configuration and instance-level system data are not included.
     """
 
     def __init__(
@@ -40,6 +40,7 @@ class GraphDBModule(AbstractModule):
             password (Optional[str]): The password for GraphDB authentication.
             maintenance_db (str): Not used by GraphDB, kept for compatibility with AbstractModule.
             timeout (int): Timeout in seconds for HTTP requests to GraphDB.
+            file_extension (str): Extension used for generated backup files.
         """
         super().__init__(
             host, port, username, password, maintenance_db or "", file_extension
@@ -52,12 +53,37 @@ class GraphDBModule(AbstractModule):
 
     # HTTP helpers
     def _get(self, path: str, **kw) -> requests.Response:
+        """Send an authenticated GET request to a GraphDB endpoint.
+
+        Args:
+            path (str): Endpoint path relative to the GraphDB server.
+            **kw: Additional arguments passed to ``requests.get``.
+
+        Returns:
+            requests.Response: Successful response; the caller must close it
+            when requesting a streamed response.
+
+        Raises:
+            requests.RequestException: If the request or HTTP status fails.
+        """
         url = f"{self._base}{path}"
         r = requests.get(url, auth=self._auth, timeout=self._timeout, **kw)
         r.raise_for_status()
         return r
 
     def _post(self, path: str, **kw) -> requests.Response:
+        """Send an authenticated POST request to a GraphDB endpoint.
+
+        Args:
+            path (str): Endpoint path relative to the GraphDB server.
+            **kw: Additional arguments passed to ``requests.post``.
+
+        Returns:
+            requests.Response: Successful response from the server.
+
+        Raises:
+            requests.RequestException: If the request or HTTP status fails.
+        """
         url = f"{self._base}{path}"
         r = requests.post(url, auth=self._auth, timeout=self._timeout, **kw)
         r.raise_for_status()
@@ -86,134 +112,175 @@ class GraphDBModule(AbstractModule):
             return []
 
     def _backup_database(self, name: str, destination_file: Path) -> bool:
-        """
-        Creates a backup of the specified GraphDB repository and saves it as a ZIP file.
+        """Export a repository's explicit RDF statements as N-Quads.
+
+        The export includes blank nodes and named graphs, but excludes inferred
+        statements, repository configuration and instance-level system data.
+        It streams into a temporary file before replacing the destination.
 
         Args:
-            name (str): The ID of the GraphDB repository to back up.
-            destination_file (Path): The full path where the backup ZIP file will be saved.
+            name (str): ID of the GraphDB repository to back up.
+            destination_file (Path): Path for the resulting N-Quads file.
 
         Returns:
-            bool: True if the backup was successful, False otherwise.
+            bool: True if the export and replacement succeed; False on a
+            handled HTTP or filesystem error.
         """
-        logger.info(f"Starting backup for GraphDB repository '{name}'...")
+        repository = quote(name, safe="")
+        temporary_path = None
         try:
-            # Preferred (Enterprise) recovery API
-            r = self._post(f"/rest/recovery/backup/{name}")
-            backup_file_name_on_server = r.text.strip().strip('"')
-            logger.info(
-                f"Backup process for '{name}' initiated on server, server-side backup file: '{backup_file_name_on_server}'. Downloading..."
-            )
-
             destination_file.parent.mkdir(parents=True, exist_ok=True)
             with (
                 self._get(
-                    f"/rest/recovery/download/{backup_file_name_on_server}", stream=True
-                ) as download_stream,
-                destination_file.open("wb") as f_out,
+                    f"/repositories/{repository}/statements",
+                    params={"infer": "false"},
+                    headers={"Accept": "application/n-quads"},
+                    stream=True,
+                ) as response,
+                tempfile.NamedTemporaryFile(
+                    dir=destination_file.parent, prefix=".graphdb-backup-", delete=False
+                ) as output,
             ):
-                for chunk in download_stream.iter_content(chunk_size=8192):
-                    f_out.write(chunk)
-
-            logger.info(
-                f"Backup for repository '{name}' successfully saved to {destination_file}"
-            )
+                temporary_path = Path(output.name)
+                for chunk in response.iter_content(chunk_size=65536):
+                    output.write(chunk)
+            temporary_path.replace(destination_file)
             return True
-        except requests.exceptions.HTTPError as exc:
-            status = getattr(exc.response, "status_code", None)
-            # Fallback for GraphDB Free/community without recovery endpoints
-            if status in (404, 405):
-                try:
-                    logger.info(
-                        f"Recovery API not available (status {status}). Falling back to RDF export for '{name}'."
-                    )
-                    destination_file.parent.mkdir(parents=True, exist_ok=True)
-                    # Export all statements as N-Triples for broad compatibility
-                    with (
-                        self._get(
-                            f"/repositories/{name}/statements",
-                            headers={"Accept": "application/n-triples"},
-                            stream=True,
-                        ) as resp,
-                        destination_file.open("wb") as f_out,
-                    ):
-                        for chunk in resp.iter_content(chunk_size=8192):
-                            f_out.write(chunk)
-                    logger.info(
-                        f"RDF export backup for repository '{name}' saved to {destination_file}"
-                    )
-                    return True
-                except requests.exceptions.RequestException as exc2:
-                    logger.error(
-                        f"GraphDB RDF export backup failed for '{name}': {exc2}"
-                    )
-                    return False
-            logger.error(
-                f"GraphDB backup for repository '{name}' failed during HTTP operation: {exc}"
-            )
+        except (requests.RequestException, OSError) as exc:
+            logger.error("GraphDB RDF export failed for '%s': %s", name, exc)
             return False
-        except Exception as exc:  # Catch other unexpected errors  # noqa: BLE001
-            logger.error(
-                f"An unexpected error occurred during GraphDB backup for '{name}': {exc}"
-            )
-            return False
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
-    def _restore_database(self, name: str, source_file: Path) -> bool:
-        """
-        Restores a GraphDB repository from a backup ZIP file.
+    def _restore_prepared_database(
+        self, name: str, source_file: Path, archive_file: Path
+    ) -> bool:
+        """Restore an expanded archive, storing recovery data beside the archive.
 
         Args:
-            name (str): The ID of the GraphDB repository to restore.
-            source_file (Path): The path to the backup ZIP file.
+            name (str): ID of the repository to restore.
+            source_file (Path): Path to the expanded N-Quads backup.
+            archive_file (Path): Original compressed backup, whose parent is
+                used for the recovery snapshot.
 
         Returns:
-            bool: True if the restore was successful, False otherwise.
+            bool: True if the requested restore succeeds; False otherwise,
+            including when the previous data was successfully recovered.
         """
-        if not source_file.exists():
-            logger.error(
-                f"Backup file {source_file} does not exist for GraphDB restore."
-            )
-            return False
+        return self._restore_with_recovery(name, source_file, archive_file.parent)
 
-        logger.info(
-            f"Starting restore for GraphDB repository '{name}' from file {source_file}..."
-        )
+    def _restore_database(self, name: str, source_file: Path) -> bool:
+        """Restore an uncompressed N-Quads backup to an existing repository.
+
+        A recovery snapshot is created beside the backup before replacement.
+        See ``_restore_with_recovery`` for failure and concurrency behavior.
+
+        Args:
+            name (str): ID of the repository to restore.
+            source_file (Path): Path to the N-Quads backup.
+
+        Returns:
+            bool: True if the requested restore succeeds; False otherwise.
+        """
+        return self._restore_with_recovery(name, source_file, source_file.parent)
+
+    def _restore_with_recovery(
+        self, name: str, source_file: Path, recovery_parent: Path
+    ) -> bool:
+        """Replace RDF data after saving a snapshot for recovery.
+
+        The snapshot and metadata are saved in a private directory under
+        ``recovery_parent``. If replacement fails after modification starts,
+        the method attempts to restore the snapshot. The directory is retained
+        if recovery fails or execution is interrupted before cleanup.
+
+        Replacement and recovery each clear and import in separate requests;
+        they are not atomic. Other writes must be stopped throughout the
+        operation, and a lost HTTP response can leave the outcome uncertain.
+
+        Args:
+            name (str): ID of the existing repository to restore.
+            source_file (Path): Path to the N-Quads backup to import.
+            recovery_parent (Path): Writable directory for the snapshot.
+
+        Returns:
+            bool: True only if the requested restore succeeds. Returns False
+            on a handled error, even if the previous data was recovered.
+        """
+        recovery_dir = None
+        snapshot_ready = False
+        modification_started = False
+        may_remove_snapshot = False
         try:
-            # Preferred (Enterprise) recovery API
-            with source_file.open("rb") as f_in:
-                files_payload = {"file": (source_file.name, f_in, "application/zip")}
-                self._post(f"/rest/recovery/restore/{name}", files=files_payload)
-            logger.info(f"Repository '{name}' successfully restored from {source_file}")
+            # Fail before changing the database if the requested backup is unreadable.
+            with source_file.open("rb"):
+                pass
+            recovery_dir = Path(
+                tempfile.mkdtemp(prefix=".graphdb-recovery-", dir=recovery_parent)
+            )
+            (recovery_dir / "metadata.json").write_text(
+                json.dumps({"repository": name, "server": self._base}), encoding="utf-8"
+            )
+            snapshot = recovery_dir / "previous.nq"
+            if not self._backup_database(name, snapshot):
+                may_remove_snapshot = True
+                return False
+            snapshot_ready = True
+            logger.info("GraphDB recovery snapshot for '%s': %s", name, snapshot)
+
+            modification_started = True
+            self._replace_rdf(name, source_file)
+            may_remove_snapshot = True
             return True
-        except requests.exceptions.HTTPError as exc:
-            status = getattr(exc.response, "status_code", None)
-            # Fallback for GraphDB Free/community: RDF import via RDF4J API
-            if status in (404, 405):
+        except (requests.RequestException, OSError, ValueError) as exc:
+            logger.error("GraphDB restore failed for '%s': %s", name, exc)
+            if snapshot_ready and modification_started:
                 try:
-                    with source_file.open("rb") as f_in:
-                        data_bytes = f_in.read()
-                    r = requests.post(
-                        f"{self._base}/repositories/{name}/statements",
-                        headers={"Content-Type": "application/n-triples"},
-                        data=data_bytes,
-                        timeout=self._timeout,
-                    )
-                    r.raise_for_status()
-                    logger.info(
-                        f"RDF import restore for repository '{name}' completed from {source_file}"
-                    )
-                    return True
-                except requests.exceptions.RequestException as exc2:
+                    self._replace_rdf(name, snapshot)
+                except (requests.RequestException, OSError, ValueError) as recovery_exc:
                     logger.error(
-                        f"GraphDB RDF import restore failed for '{name}': {exc2}"
+                        "GraphDB recovery failed for '%s': %s. Recovery snapshot retained at %s",
+                        name,
+                        recovery_exc,
+                        snapshot,
                     )
-                    return False
-            logger.error(
-                f"GraphDB restore for repository '{name}' failed during HTTP operation: {exc}"
-            )
+                else:
+                    logger.warning("GraphDB previous RDF data restored for '%s'", name)
+                    may_remove_snapshot = True
+            elif not snapshot_ready:
+                may_remove_snapshot = True
             return False
-        except Exception as exc:  # Catch other unexpected errors  # noqa: BLE001
-            logger.error(
-                f"An unexpected error occurred during GraphDB restore for '{name}': {exc}"
+        finally:
+            if recovery_dir is not None and may_remove_snapshot:
+                try:
+                    shutil.rmtree(recovery_dir)
+                except OSError as exc:
+                    logger.warning(
+                        "Could not remove recovery directory %s: %s", recovery_dir, exc
+                    )
+
+    def _replace_rdf(self, name: str, source_file: Path) -> None:
+        """Clear a repository and stream an N-Quads file into it.
+
+        Clearing and importing are separate operations. The caller is
+        responsible for recovery if either operation fails after clearing.
+
+        Args:
+            name (str): ID of the repository to replace.
+            source_file (Path): Path to the N-Quads file to import.
+
+        Raises:
+            OSError: If the source file cannot be opened or read.
+            requests.RequestException: If either HTTP request fails.
+        """
+        repository = quote(name, safe="")
+        with source_file.open("rb") as source:
+            self._post(
+                f"/repositories/{repository}/statements", data={"update": "CLEAR ALL"}
             )
-            return False
+            self._post(
+                f"/repositories/{repository}/statements",
+                headers={"Content-Type": "application/n-quads"},
+                data=source,
+            )

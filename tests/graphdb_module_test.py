@@ -254,3 +254,215 @@ def test_restore_recovers_data(mod, tmp_path, base_url, sparql_headers, sample_t
     )
     resp_res.raise_for_status()
     assert resp_res.json().get("boolean") is True, "Data not found after restore"
+
+
+def test_restore_replaces_data_and_preserves_named_graph(mod, tmp_path, base_url):
+    graph = "http://example.org/backup-test-graph"
+    before = "http://example.org/before"
+    after = "http://example.org/after"
+    _post_update(
+        base_url,
+        REPO,
+        f'INSERT DATA {{ GRAPH <{graph}> {{ <{before}> <http://example.org/p> "saved" }} }}',
+    ).raise_for_status()
+    backup = tmp_path / "repo.backup"
+    assert mod.backup_database(REPO, backup)
+    _post_update(
+        base_url,
+        REPO,
+        f'DELETE DATA {{ GRAPH <{graph}> {{ <{before}> <http://example.org/p> "saved" }} }}; '
+        f'INSERT DATA {{ <{after}> <http://example.org/p> "new" }}',
+    ).raise_for_status()
+    assert mod.restore_database(REPO, backup)
+    for query, expected in [
+        (
+            f'ASK {{ GRAPH <{graph}> {{ <{before}> <http://example.org/p> "saved" }} }}',
+            True,
+        ),
+        (f'ASK {{ <{after}> <http://example.org/p> "new" }}', False),
+    ]:
+        response = requests.get(
+            f"{base_url}/repositories/{REPO}",
+            params={"query": query},
+            headers={"Accept": "application/sparql-results+json"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        assert response.json()["boolean"] is expected
+
+
+def test_corrupt_restore_keeps_existing_data(mod, tmp_path, base_url):
+    marker = "http://example.org/rollback-marker"
+    _post_update(
+        base_url, REPO, f'INSERT DATA {{ <{marker}> <http://example.org/p> "keep" }}'
+    ).raise_for_status()
+    backup = tmp_path / "broken.backup"
+    backup.write_text("not valid RDF")
+
+    assert not mod.restore_database(REPO, backup)
+    response = requests.get(
+        f"{base_url}/repositories/{REPO}",
+        params={"query": f'ASK {{ <{marker}> <http://example.org/p> "keep" }}'},
+        headers={"Accept": "application/sparql-results+json"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    assert response.json()["boolean"] is True
+
+
+def test_restore_exactly_matches_backup_after_data_changes(mod, tmp_path, base_url):
+    _post_update(base_url, REPO, "CLEAR ALL").raise_for_status()
+    _post_update(
+        base_url,
+        REPO,
+        """INSERT DATA {
+            <urn:common> <urn:predicate> "common" .
+            <urn:removed> <urn:predicate> "restore me" .
+            GRAPH <urn:saved-graph> { <urn:saved> <urn:predicate> "saved" . }
+        }""",
+    ).raise_for_status()
+    backup = tmp_path / "snapshot.backup"
+    assert mod.backup_database(REPO, backup)
+    expected = set(backup.read_text().splitlines())
+
+    _post_update(
+        base_url,
+        REPO,
+        """DELETE DATA {
+            <urn:removed> <urn:predicate> "restore me" .
+            GRAPH <urn:saved-graph> { <urn:saved> <urn:predicate> "saved" . }
+        }; INSERT DATA {
+            <urn:extra> <urn:predicate> "remove me" .
+            GRAPH <urn:extra-graph> { <urn:extra> <urn:predicate> "remove me" . }
+        }""",
+    ).raise_for_status()
+    assert mod.restore_database(REPO, backup)
+
+    response = requests.get(
+        f"{base_url}/repositories/{REPO}/statements",
+        params={"infer": "false"},
+        headers={"Accept": "application/n-quads"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    assert set(response.text.splitlines()) == expected
+
+
+def test_restore_replaces_blank_nodes_and_preserves_links(mod, tmp_path, base_url):
+    _post_update(base_url, REPO, "CLEAR ALL").raise_for_status()
+    _post_update(
+        base_url,
+        REPO,
+        'INSERT DATA { _:extra <urn:predicate> "keep if restore fails" . }',
+    ).raise_for_status()
+    backup = tmp_path / "snapshot.backup"
+    backup.write_text(
+        '_:saved <urn:predicate> "saved" .\n'
+        '_:saved <urn:predicate> "named" <urn:graph> .\n'
+    )
+    for _ in range(2):
+        assert mod.restore_database(REPO, backup)
+
+    response = requests.get(
+        f"{base_url}/repositories/{REPO}",
+        params={
+            "query": 'ASK { ?s <urn:predicate> "saved" . '
+            'GRAPH <urn:graph> { ?s <urn:predicate> "named" } }'
+        },
+        headers={"Accept": "application/sparql-results+json"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    assert response.json()["boolean"] is True
+    response = requests.get(
+        f"{base_url}/repositories/{REPO}",
+        params={"query": 'ASK { ?s <urn:predicate> "keep if restore fails" }'},
+        headers={"Accept": "application/sparql-results+json"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    assert response.json()["boolean"] is False
+
+
+def test_corrupt_restore_recovers_blank_nodes(mod, tmp_path, base_url):
+    _post_update(base_url, REPO, "CLEAR ALL").raise_for_status()
+    _post_update(
+        base_url,
+        REPO,
+        'INSERT DATA { _:s <urn:p> "before" . GRAPH <urn:g> { _:s <urn:p> "linked" } }',
+    ).raise_for_status()
+    backup = tmp_path / "corrupt.backup"
+    backup.write_text("not valid RDF")
+
+    assert not mod.restore_database(REPO, backup)
+    response = requests.get(
+        f"{base_url}/repositories/{REPO}",
+        params={
+            "query": 'ASK { ?s <urn:p> "before" . GRAPH <urn:g> { ?s <urn:p> "linked" } }'
+        },
+        headers={"Accept": "application/sparql-results+json"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    assert response.json()["boolean"] is True
+    assert not list(tmp_path.glob(".graphdb-recovery-*"))
+
+
+def test_failed_recovery_retains_snapshot(mod, tmp_path, base_url, monkeypatch):
+    _post_update(base_url, REPO, "CLEAR ALL").raise_for_status()
+    _post_update(
+        base_url, REPO, 'INSERT DATA { <urn:old> <urn:p> "old" }'
+    ).raise_for_status()
+    backup = tmp_path / "backup.nq"
+    backup.write_text('<urn:new> <urn:p> "new" .\n')
+
+    original_post = mod._post
+    calls = []
+
+    def fail_import(path, **kwargs):
+        calls.append(path)
+        if "headers" in kwargs:
+            raise requests.ConnectionError("simulated import failure")
+        return original_post(path, **kwargs)
+
+    monkeypatch.setattr(mod, "_post", fail_import)
+    assert not mod.restore_database(REPO, backup)
+    assert len(calls) == 4
+    snapshots = list(tmp_path.glob(".graphdb-recovery-*/previous.nq"))
+    assert len(snapshots) == 1
+    assert '<urn:old> <urn:p> "old" .' in snapshots[0].read_text()
+    assert (
+        json.loads((snapshots[0].parent / "metadata.json").read_text())["repository"]
+        == REPO
+    )
+
+
+def test_interruption_preserves_recovery_snapshot(mod, tmp_path, monkeypatch):
+    backup = tmp_path / "backup.nq"
+    backup.write_text('<urn:new> <urn:p> "new" .\n')
+
+    def interrupt(name, path):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(mod, "_replace_rdf", interrupt)
+    with pytest.raises(KeyboardInterrupt):
+        mod.restore_database(REPO, backup)
+    assert len(list(tmp_path.glob(".graphdb-recovery-*/previous.nq"))) == 1
+
+
+def test_restore_into_empty_repository(mod, tmp_path, base_url):
+    _post_update(base_url, REPO, "CLEAR ALL").raise_for_status()
+    backup = tmp_path / "valid.backup"
+    backup.write_text('<http://example.org/s> <http://example.org/p> "value" .\n')
+
+    assert mod.restore_database(REPO, backup)
+    response = requests.get(
+        f"{base_url}/repositories/{REPO}",
+        params={
+            "query": 'ASK { <http://example.org/s> <http://example.org/p> "value" }'
+        },
+        headers={"Accept": "application/sparql-results+json"},
+        timeout=10,
+    )
+    response.raise_for_status()
+    assert response.json()["boolean"] is True
