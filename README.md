@@ -102,6 +102,10 @@ If a valid name_or_path is provided it restores this file to the database as con
 
 If a configuration name is provided, the application will log the chosen backup file for restore.
 
+The command exits with status code `0` when the restore succeeds and with status code `1` when the restore fails or when no backup is found for the requested configuration name, so it can be safely used in scripts.
+
+Backups compressed with `.gz` are decompressed in a private system temporary directory before restore. The directory is removed when the restore completes or raises an exception. The temporary filesystem must have enough free space for the uncompressed backup. An abrupt process termination can leave a `nards-db-restore-` directory behind; remove abandoned directories after verifying that no restore is using them.
+
 ### PostGIS Extensions (pgvector, etc.)
 
 - When backing up a PostGIS database, the app inspects installed extensions (excluding `plpgsql`) and writes a companion `<backup>.pre.sql` with `CREATE EXTENSION IF NOT EXISTS ...` statements (always including `postgis`, plus any others like `vector`).

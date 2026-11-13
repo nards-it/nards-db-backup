@@ -40,6 +40,11 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
         """
         super().__init__(host, port, username, password, maintenance_db, file_extension)
 
+    def _restore_prepared_database(
+        self, name: str, source_file: Path, archive_file: Path
+    ) -> bool:
+        return self._restore_database(name, source_file, archive_file.with_suffix(""))
+
     def _connect(self):
         """
         Establishes a connection to the PostgreSQL server.
@@ -186,7 +191,9 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
             logger.error(f"Error backing up database {name}: {e}")
             return False
 
-    def _restore_database(self, name: str, source_file: Path) -> bool:
+    def _restore_database(
+        self, name: str, source_file: Path, original_file: Path | None = None
+    ) -> bool:
         """
         Restores the specified PostGIS database from a backup file.
 
@@ -249,7 +256,7 @@ class PostGISModule(PostgreSQLClientMixin, AbstractModule):
             logger.info(f"Database {name} created successfully.")
 
             # Execute .pre.sql script if it exists to create extensions
-            pre_sql_file = source_file.with_suffix(".pre.sql")
+            pre_sql_file = (original_file or source_file).with_suffix(".pre.sql")
             if pre_sql_file.exists():
                 logger.info(
                     f"Found pre-restore SQL script: {pre_sql_file}. Attempting to execute it."

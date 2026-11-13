@@ -62,6 +62,10 @@ def restore(name_or_path):
     """
     Restore the database from a given configuration name or backup file path.
 
+    The command exits with status code 0 when the restore succeeds and with
+    status code 1 when it fails or when no backup is found for the requested
+    configuration name.
+
     Args:
         name_or_path (str): The configuration name or the path to the backup file.
     """
@@ -72,11 +76,11 @@ def restore(name_or_path):
         logger.info(
             f"Attempting to restore database '{restore_db_name}' from file '{name_or_path}'"
         )
-        restore_success = db_module.restore_database(restore_db_name, backup_path)
-        if restore_success:
+        if db_module.restore_database(restore_db_name, backup_path):
             logger.info(f"Restore successful for '{name_or_path}'")
         else:
             logger.error(f"Restore failed for '{name_or_path}'")
+            raise click.ClickException(f"Restore failed for '{name_or_path}'")
     else:
         # If a configuration name is provided
         restore_cron_name = name_or_path
@@ -93,21 +97,22 @@ def restore(name_or_path):
                 f"Attempting to restore database '{restore_db_name}' from latest backup '{backup_file}' for "
                 f"configuration '{restore_cron_name}'"
             )
-            restore_success = db_module.restore_database(
-                restore_db_name, backup_file_path
-            )
-            if restore_success:
+            if db_module.restore_database(restore_db_name, backup_file_path):
                 logger.info(
                     f"Restore successful for configuration '{restore_cron_name}' "
                     f"using backup file '{backup_file}'"
                 )
             else:
-                logger.error(
+                message = (
                     f"Restore failed for configuration '{restore_cron_name}' "
                     f"using backup file '{backup_file}'"
                 )
+                logger.error(message)
+                raise click.ClickException(message)
         else:
-            logger.warning(f"No backups found for configuration '{restore_cron_name}'")
+            message = f"No backups found for configuration '{restore_cron_name}'"
+            logger.warning(message)
+            raise click.ClickException(message)
 
 
 def run_app(start_server: bool = True) -> None:
