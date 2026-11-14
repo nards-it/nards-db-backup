@@ -140,6 +140,42 @@ def test_restore_from_config_name_uses_the_latest_backup(cli_app, tmp_path):
     assert db_module.restore_calls == [("mydb", newer)]
 
 
+def test_restore_from_config_ignores_recovery_snapshot(cli_app, tmp_path):
+    app_mod, _ = cli_app
+    db_module = _RestoreModule(".nq")
+    app_mod.db_module = db_module
+    backup = _make_backup_file(tmp_path, "daily/mydb.20240101000000.nq", b"backup")
+    snapshot = _make_backup_file(
+        tmp_path, "daily/.graphdb-recovery-test/previous.20240102000000.nq", b"old"
+    )
+    os.utime(backup, (1, 1))
+    os.utime(snapshot, (2, 2))
+
+    assert _invoke_restore(app_mod, "daily") == 0
+    assert db_module.restore_calls == [("mydb", backup)]
+
+
+def test_restore_from_config_ignores_newer_postgis_script(cli_app, tmp_path):
+    app_mod, _ = cli_app
+    db_module = _RestoreModule(".sql")
+    app_mod.db_module = db_module
+    backup = _make_backup_file(tmp_path, "daily/mydb.20240101000000.sql", b"backup")
+    script = _make_backup_file(tmp_path, "daily/mydb.20240101000000.pre.sql", b"script")
+    os.utime(backup, (1, 1))
+    os.utime(script, (2, 2))
+
+    assert _invoke_restore(app_mod, "daily") == 0
+    assert db_module.restore_calls == [("mydb", backup)]
+
+
+def test_restore_from_explicit_nonstandard_file_remains_supported(cli_app, tmp_path):
+    app_mod, db_module = cli_app
+    backup = _make_backup_file(tmp_path, "manual.backup", b"backup")
+
+    assert _invoke_restore(app_mod, str(backup)) == 0
+    assert db_module.restore_calls == [("manual", backup)]
+
+
 def test_restore_from_config_name_without_backups_fails(cli_app, capsys):
     app_mod, db_module = cli_app
 

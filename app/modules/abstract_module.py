@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import zlib
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
 from pathlib import Path
 
 # Configura il logger
@@ -197,6 +198,47 @@ class AbstractModule(metaclass=ABCMeta):
         """Return the glob used to find this module's backup files."""
         database_pattern = f"{database_name}.*" if database_name else "*"
         return f"**/{database_pattern}{self.file_extension}"
+
+    def iter_backup_files(
+        self, directory: Path, database_name: str | None = None
+    ) -> Iterator[Path]:
+        """Find scheduler-generated backups without selecting auxiliary files.
+
+        Names must contain a non-empty database name and a 14-digit timestamp
+        before the configured literal extension. Recovery directories are
+        excluded, and a requested database name must match exactly.
+
+        Args:
+            directory: Root directory to search recursively.
+            database_name: Restrict results to this exact database name.
+
+        Yields:
+            Regular backup paths matching the scheduler's naming convention.
+        """
+        root = Path(directory)
+        for path in root.rglob("*"):
+            relative = path.relative_to(root)
+            if any(
+                part.startswith(".graphdb-recovery-") for part in relative.parts[:-1]
+            ):
+                continue
+            if path.is_symlink() or not path.is_file():
+                continue
+            filename = path.name
+            if not filename.endswith(self.file_extension):
+                continue
+            stem = filename[: -len(self.file_extension)]
+            db_name, separator, timestamp = stem.rpartition(".")
+            if (
+                not separator
+                or not db_name
+                or len(timestamp) != 14
+                or not timestamp.isascii()
+                or not timestamp.isdigit()
+            ):
+                continue
+            if database_name is None or db_name == database_name:
+                yield path
 
     def database_name_from_backup(self, backup_file: Path | str) -> str:
         """Extract the database name from a scheduler-generated backup file."""

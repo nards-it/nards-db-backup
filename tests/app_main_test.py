@@ -2,6 +2,8 @@ import os
 import sys
 from pathlib import Path
 
+from app.modules.abstract_module import AbstractModule
+
 
 def _import_app_py(module_name: str, rootdir) -> object:
     """Import app.py fresh under a unique module name."""
@@ -20,6 +22,9 @@ def _import_app_py(module_name: str, rootdir) -> object:
 
 
 class _FakeDB:
+    file_extension = ".backup"
+    iter_backup_files = AbstractModule.iter_backup_files
+
     def __init__(self, calls):
         self.calls = calls
         self.restore_called = False
@@ -30,9 +35,6 @@ class _FakeDB:
         self.restore_called = True
         self.restore_args = (name, Path(source_file))
         return True
-
-    def backup_file_glob(self):
-        return "**/*.backup"
 
     def database_name_from_backup(self, backup_file):
         return Path(backup_file).name.rsplit(".", 2)[0]
@@ -67,6 +69,9 @@ def test_run_app_with_startup_restore(monkeypatch, tmp_path, pytestconfig):
     backup_dir.mkdir(parents=True)
     backup_file = backup_dir / "mydb.20240101000000.backup"
     backup_file.write_text("dummy")
+    recovery = backup_dir / ".graphdb-recovery-test"
+    recovery.mkdir()
+    (recovery / "previous.20250101000000.backup").write_text("snapshot")
 
     # Ensure Config reads our temp dirs and that restore is enabled
     app_mod.Config.BACKUP_DIR = tmp_path

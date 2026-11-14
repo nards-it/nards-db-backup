@@ -86,7 +86,7 @@ def restore(name_or_path):
         restore_cron_name = name_or_path
         restore_backup_dir = Config.BACKUP_DIR / restore_cron_name
         backup_file = max(
-            restore_backup_dir.glob(db_module.backup_file_glob()),
+            db_module.iter_backup_files(restore_backup_dir),
             key=os.path.getmtime,
             default=None,
         )
@@ -126,7 +126,7 @@ def run_app(start_server: bool = True) -> None:
         cron_name = Config.RESTORE_CONFIG_NAME
         backup_dir = Config.BACKUP_DIR / cron_name
         latest_backup = max(
-            backup_dir.glob(db_module.backup_file_glob()),
+            db_module.iter_backup_files(backup_dir),
             key=os.path.getmtime,
             default=None,
         )

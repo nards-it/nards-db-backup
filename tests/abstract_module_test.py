@@ -285,3 +285,32 @@ def test_backup_file_glob_matches_generated_backups(tmp_path, file_extension):
     assert list(tmp_path.glob(module.backup_file_glob())) == [backup_file]
     assert list(tmp_path.glob(module.backup_file_glob("database"))) == [backup_file]
     assert list(tmp_path.glob(module.backup_file_glob("other"))) == []
+
+
+def test_iter_backup_files_excludes_auxiliary_and_recovery_files(tmp_path):
+    module = _module(".sql")
+    names = [
+        "alpha.20240101000000.sql",
+        "alpha.billing.20240101000000.sql",
+        "alpha.20240101000000.pre.sql",
+        "alpha.not-a-timestamp.sql",
+    ]
+    for name in names:
+        (tmp_path / name).write_text("content")
+    recovery = tmp_path / ".graphdb-recovery-test"
+    recovery.mkdir()
+    (recovery / "alpha.20240101000000.sql").write_text("snapshot")
+    (tmp_path / "directory.20240101000000.sql").mkdir()
+
+    assert {p.name for p in module.iter_backup_files(tmp_path)} == set(names[:2])
+    assert [p.name for p in module.iter_backup_files(tmp_path, "alpha")] == [names[0]]
+
+
+def test_iter_backup_files_treats_glob_metacharacters_literally(tmp_path):
+    module = _module(".backup[1]")
+    expected = tmp_path / "db[1].20240101000000.backup[1]"
+    unexpected = tmp_path / "db1.20240101000000.backup1"
+    expected.write_text("backup")
+    unexpected.write_text("other")
+
+    assert list(module.iter_backup_files(tmp_path, "db[1]")) == [expected]

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -51,3 +52,23 @@ def test_scheduler_compresses_only_gzip_extensions(
     created_backups = list((tmp_path / "daily").glob(module.backup_file_glob()))
     assert len(created_backups) == 1
     assert created_backups[0].exists()
+
+
+def test_retention_only_deletes_backups_for_exact_database(tmp_path):
+    module = _BackupModule(".sql")
+    scheduler = Scheduler(module, cron_configs=[], backup_dir=tmp_path)
+    directory = tmp_path / "daily"
+    directory.mkdir()
+    old = directory / "alpha.20240101000000.sql"
+    new = directory / "alpha.20240102000000.sql"
+    other = directory / "alpha.billing.20240101000000.sql"
+    sidecar = directory / "alpha.20240101000000.pre.sql"
+    for file in (old, new, other, sidecar):
+        file.write_text("data")
+    os.utime(old, (1, 1))
+    os.utime(new, (2, 2))
+
+    scheduler.cleanup_old_backups("daily", "alpha", retention_max=1)
+
+    assert not old.exists()
+    assert all(file.exists() for file in (new, other, sidecar))
