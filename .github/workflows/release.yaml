@@ -8,7 +8,11 @@ env:
   TAG_NAME: ${{ github.event.release.tag_name }}
 
 jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   dockerhub-build-push:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - 
@@ -32,26 +36,13 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       -
-        name: Build and push major version
+        name: Build and push release tags
         uses: docker/build-push-action@v4
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ vars.DOCKERHUB_REPOSITORY }}:${{ env.MAJOR }}
-      -
-        name: Build and push this version
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: true
-          tags: ${{ vars.DOCKERHUB_REPOSITORY }}:${{ env.VERSION }}
-      -
-        name: Build and push latest version
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: true
-          tags: ${{ vars.DOCKERHUB_REPOSITORY }}:latest
+          tags: |
+            ${{ vars.DOCKERHUB_REPOSITORY }}:${{ env.MAJOR }}
+            ${{ vars.DOCKERHUB_REPOSITORY }}:${{ env.VERSION }}
+            ${{ vars.DOCKERHUB_REPOSITORY }}:latest
