@@ -20,6 +20,24 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL, PostGIS, MongoDB, Redis, and GraphDB, and can restore backups via command-line arguments.
 
+## Upgrading to 2.0.0
+
+Version 2.0.0 introduces the following breaking changes compared with 1.0.2:
+
+- The Docker image supports `linux/amd64` and `linux/arm64`; `linux/arm/v7`
+  support has been removed. Version `v1.0.2` is the last version providing an
+  ARMv7 image. ARMv7 users should pin `nards/nards-db-backup:v1.0.2` instead
+  of `latest`.
+- PostgreSQL and PostGIS backup and restore require server major versions
+  14 through 18. The image selects a client matching the server major version.
+  Version `v1.0.2` is the last version with the previous PostgreSQL client
+  compatibility; it contains PostgreSQL 15 client tools, which support dumping
+  older servers. Users of servers older than 14 should remain on `v1.0.2`
+  until they upgrade their database and verify backup and restore.
+
+The `latest` tag moves between releases and includes these breaking changes.
+See [CHANGELOG.md](CHANGELOG.md) for the release notes.
+
 ## Features
 
 - Schedule database backups using cron expressions.
@@ -103,6 +121,11 @@ Restore the database from a given configuration name or backup file path:
 If a valid name_or_path is provided it restores this file to the database as configured with environment variables, else it tries to restore the latest backup from the backup configuration name provided with `RESTORE_CONFIG_NAME`. 
 
 If a configuration name is provided, the application will log the chosen backup file for restore.
+
+Automatic restore and retention only consider regular scheduler-generated files
+named `<database>.<14-digit timestamp><configured extension>`. Recovery
+directories are excluded. Restore a backup with a nonstandard name by passing
+its path explicitly.
 
 The command exits with status code `0` when the restore succeeds and with status code `1` when the restore fails or when no backup is found for the requested configuration name, so it can be safely used in scripts.
 
