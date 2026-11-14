@@ -119,11 +119,19 @@ class MySQLModule(AbstractModule):
             f" {destination_file}"
         )
         try:
-            subprocess.run(command, shell=True, check=True, text=True)
+            result = subprocess.run(
+                command, shell=True, check=True, text=True, stderr=subprocess.PIPE
+            )
+            self._log_stderr(result.stderr)
             logger.info(f"Backup successful for database {name} to {destination_file}.")
             return True
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error backing up database {name}: {e}")
+            logger.error(
+                "Error backing up database %s: command exited with status %s; stderr: %s",
+                name,
+                e.returncode,
+                self._redact_password(e.stderr or "(no diagnostic output)"),
+            )
             return False
 
     def _restore_database(self, name: str, source_file: Path) -> bool:
@@ -152,21 +160,37 @@ class MySQLModule(AbstractModule):
 
         try:
             # Drop and recreate the database
-            subprocess.run(
-                drop_command, shell=True, check=True, text=True, encoding="utf-8"
+            result = subprocess.run(
+                drop_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                stderr=subprocess.PIPE,
             )
+            self._log_stderr(result.stderr)
             logger.info(f"Database {name} dropped and recreated successfully.")
 
             # Restore the database from the backup file
-            subprocess.run(
-                restore_command, shell=True, check=True, text=True, encoding="utf-8"
+            result = subprocess.run(
+                restore_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                stderr=subprocess.PIPE,
             )
+            self._log_stderr(result.stderr)
             logger.info(f"Restore successful for database {name} from {source_file}.")
             return True
         except subprocess.CalledProcessError as e:
+            operation = "database recreation" if e.cmd == drop_command else "import"
             logger.error(
-                f"Error restoring database {name}: {e}. Command: "
-                f"{drop_command if e.cmd == drop_command else restore_command}"
+                "Error restoring database %s during %s: command exited with status %s; stderr: %s",
+                name,
+                operation,
+                e.returncode,
+                self._redact_password(e.stderr or "(no diagnostic output)"),
             )
             return False
         except FileNotFoundError:
@@ -174,6 +198,27 @@ class MySQLModule(AbstractModule):
             return False
         except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             logger.error(
-                f"Unexpected error occurred while restoring database {name}: {e}"
+                "Unexpected error restoring database %s (%s): %s",
+                name,
+                type(e).__name__,
+                self._redact_password(str(e)),
             )
             return False
+
+    def _redact_password(self, message: str) -> str:
+        """Mask the configured password in diagnostic text before logging.
+
+        Both the literal password and its escaped Python representation are
+        removed, because exception messages can contain either form.
+        """
+        if not self._password:
+            return message
+        escaped = repr(self._password)[1:-1]
+        for value in sorted({self._password, escaped}, key=len, reverse=True):
+            message = message.replace(value, "[REDACTED]")
+        return message
+
+    def _log_stderr(self, stderr: str | None) -> None:
+        """Log command warnings without exposing the configured password."""
+        if stderr:
+            logger.warning("MySQL command stderr: %s", self._redact_password(stderr))
