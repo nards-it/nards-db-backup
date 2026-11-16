@@ -1,0 +1,133 @@
+services:
+  test-runner:
+    build: .
+    command: pytest -q
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/app
+      - redis-data:/data
+    environment:
+      DB_HOST_MYSQL: mysql
+      DB_PORT_MYSQL: "3306"
+      DB_USER_MYSQL: test_user
+      DB_PASSWORD_MYSQL: test_password
+      DB_NAME_MYSQL: test_database
+      DB_HOST_GRAPHDB: graphdb
+      DB_PORT_GRAPHDB: "7200"
+      DB_HOST_POSTGRES: postgres
+      DB_PORT_POSTGRES: "5432"
+      DB_USER_POSTGRES: test_user
+      DB_PASSWORD_POSTGRES: test_password
+      DB_NAME_POSTGRES: test_database
+      DB_HOST_POSTGIS: postgis
+      DB_PORT_POSTGIS: "5432"
+      DB_USER_POSTGIS: test_user
+      DB_PASSWORD_POSTGIS: test_password
+      DB_NAME_POSTGIS: test_database
+      DB_HOST_POSTGIS_VECTOR: postgis_vector
+      DB_PORT_POSTGIS_VECTOR: "5432"
+      DB_USER_POSTGIS_VECTOR: test_user
+      DB_PASSWORD_POSTGIS_VECTOR: test_password
+      DB_NAME_POSTGIS_VECTOR: test_database
+      DB_HOST_REDIS: redis
+      DB_PORT_REDIS: "6379"
+      DB_PASSWORD_REDIS: ""
+      REDIS_RDB_HOST_DIR: "/data"
+      DB_HOST_MONGODB: mongodb
+      DB_PORT_MONGODB: "27017"
+      DB_USER_MONGODB: testuser
+      DB_PASSWORD_MONGODB: testpassword
+      DB_NAME_MONGODB: admin
+      MYSQL_SSL_MODE: "DISABLED"
+      PG_RESTORE_CLEAN: "true"
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: test_database
+      MYSQL_USER: test_user
+      MYSQL_PASSWORD: test_password
+    ports:
+       - "13306:3306"
+    command:
+      - --default-authentication-plugin=mysql_native_password
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "15432:5432"
+
+  postgis:
+    image: postgis/postgis:14-3.5
+    environment:
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "15433:5432"
+
+  postgis_vector:
+    build:
+      context: .
+      dockerfile: tests/resources/pgvector/Dockerfile.postgis_pgvector
+    environment:
+      POSTGRES_DB: test_database
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "15434:5432"
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    # Run redis in a simple restart loop so that SHUTDOWN during tests
+    # does not cause the container to exit and abort the compose run.
+    command: ["sh", "-lc", "while true; do redis-server; echo 'redis exited'; sleep 0.2; done"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - redis-data:/data
+  
+  graphdb:
+    image: dhlabbasel/graphdb-free:latest
+    container_name: graphdb_service_for_e2e_tests
+    ports:
+      - "7200:7200"
+    volumes:
+      - graphdb_e2e_data:/opt/graphdb/home
+    environment:
+      GDB_HEAP_SIZE: "2g"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://localhost:7200/rest/repositories || exit 1"]
+      interval: 20s
+      timeout: 15s
+      retries: 15
+
+  mongodb:
+    image: mongo:6.0
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: testuser
+      MONGO_INITDB_ROOT_PASSWORD: testpassword
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./tests/init_mongo.js:/docker-entrypoint-initdb.d/init_mongo.js:ro
+    healthcheck:
+      test: |
+        mongosh --host localhost --port 27017 --username $$MONGO_INITDB_ROOT_USERNAME --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --eval "db.adminCommand('ping')" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  redis-data:
+  graphdb_e2e_data:

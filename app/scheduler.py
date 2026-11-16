@@ -1,9 +1,9 @@
+import logging
+import os
+from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
-from pathlib import Path
-import os
-import logging
 
 
 class Scheduler:
@@ -42,7 +42,9 @@ class Scheduler:
             cron_name = cron_config.get("name")
             self.logger.info(f"Scheduling backup for cron configuration: {cron_name}")
             trigger = CronTrigger.from_crontab(cron_expr)
-            self.scheduler.add_job(self.run_backup, trigger, args=[cron_name, retention_max])
+            self.scheduler.add_job(
+                self.run_backup, trigger, args=[cron_name, retention_max]
+            )
         self.scheduler.start()
 
     def run_backup(self, cron_name, retention_max):
@@ -63,7 +65,7 @@ class Scheduler:
                 if success:
                     self.cleanup_old_backups(cron_name, db, retention_max)
                 self.health = success
-        except Exception as e:
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
             self.logger.error(f"Error during backup: {e}")
             self.health = False
 
@@ -79,9 +81,13 @@ class Scheduler:
             Path: The calculated backup file path.
         """
         now = datetime.now()
-        backup_path = self.backup_dir / cron_name / str(now.year) / str(now.month) / str(now.day)
+        backup_path = (
+            self.backup_dir / cron_name / str(now.year) / str(now.month) / str(now.day)
+        )
         backup_path.mkdir(parents=True, exist_ok=True)
-        backup_file = backup_path / f"{db_name}.{now.strftime('%Y%m%d%H%M%S')}.backup"
+        backup_file = backup_path / self.db_module.backup_file_name(
+            db_name, now.strftime("%Y%m%d%H%M%S")
+        )
         self.logger.info(f"Calculated backup file path: {backup_file}")
         return backup_file
 
@@ -95,9 +101,11 @@ class Scheduler:
             retention_max (int): The maximum number of backups to retain.
         """
         db_backup_dir = self.backup_dir / cron_name
-        all_backups = list(db_backup_dir.glob(f'**/{db_name}.*.backup'))
+        all_backups = list(self.db_module.iter_backup_files(db_backup_dir, db_name))
         all_backups.sort(key=os.path.getmtime, reverse=True)
-        self.logger.info(f"Cleaning up old backups on '{cron_name}' for '{db_name}' db, keeping the latest {retention_max} backups")
+        self.logger.info(
+            f"Cleaning up old backups on '{cron_name}' for '{db_name}' db, keeping the latest {retention_max} backups"
+        )
         if len(all_backups) > retention_max:
             for old_backup in all_backups[retention_max:]:
                 self.logger.info(f"Deleting old backup: {old_backup}")

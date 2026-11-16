@@ -18,7 +18,25 @@ Nards DB Backup is a database backup system configurable via Docker. It supports
 
 # Flask Backup Application
 
-A Flask application that schedules and manages database backups using cron jobs. It supports both MySQL and PostGIS databases and can restore backups via command-line arguments.
+A Flask application that schedules and manages database backups using cron jobs. It supports MySQL, PostgreSQL, PostGIS, MongoDB, Redis, and GraphDB, and can restore backups via command-line arguments.
+
+## Upgrading to 2.0.0
+
+Version 2.0.0 introduces the following breaking changes compared with 1.0.2:
+
+- The Docker image supports `linux/amd64` and `linux/arm64`; `linux/arm/v7`
+  support has been removed. Version `v1.0.2` is the last version providing an
+  ARMv7 image. ARMv7 users should pin `nards/nards-db-backup:v1.0.2` instead
+  of `latest`.
+- PostgreSQL and PostGIS backup and restore require server major versions
+  14 through 18. The image selects a client matching the server major version.
+  Version `v1.0.2` is the last version with the previous PostgreSQL client
+  compatibility; it contains PostgreSQL 15 client tools, which support dumping
+  older servers. Users of servers older than 14 should remain on `v1.0.2`
+  until they upgrade their database and verify backup and restore.
+
+The `latest` tag moves between releases and includes these breaking changes.
+See [CHANGELOG.md](CHANGELOG.md) for the release notes.
 
 ## Features
 
@@ -27,19 +45,30 @@ A Flask application that schedules and manages database backups using cron jobs.
 - Restore database from the most recent backup.
 - Health check endpoint to monitor the status of the last backup operation.
 - Configurable via environment variables.
+- PostGIS extension-aware backups: detects installed extensions (e.g., PostGIS, pgvector) and generates a pre-restore script to recreate them automatically.
 
 ## Configuration
 
 Configure the application via environment variables. Create a `.env` file with the following variables:
 
 - `DB_HOST=localhost`
-- `DB_PORT=5432`
+- `DB_PORT=5432` # (e.g., MySQL: 3306, Postgres/PostGIS: 5432, MongoDB: 27017, GraphDB: 7200)
 - `DB_USER=user`
 - `DB_PASSWORD=password`
-- `DB_MAINTENANCE_NAME=mydb`
-- `DB_TYPE=mysql` or `postgis`
+- `DB_MAINTENANCE_NAME=mydb` # For MongoDB, this is often 'admin' if using auth # For SQL databases; less relevant for Redis
+- `DB_TYPE=mysql|postgres|postgis|redis|mongodb|graphdb`
+  - GraphDB: `DB_PORT` is typically `7200`. `DB_USER` and `DB_PASSWORD` can often be left empty for GraphDB Free if security is disabled.
 - `CRON_CONFIGS='[{"cron": "0 0 * * *", "retention_max": 90, "name": "default"}]'`
+- `BACKUP_FILE_EXTENSION=.backup` # Set to `.backup.gz` to compress backups
 - `RESTORE_CONFIG_NAME=""`
+
+### GraphDB Notes
+
+- GraphDB Free backups contain explicit RDF statements in N-Quads, including named graphs. They do not contain repository configuration, namespace settings, user accounts, or other instance-level data. Keep those separately; the destination repository must already exist with a compatible configuration.
+- Restore first saves the existing explicit RDF statements in a `.graphdb-recovery-*` directory next to the backup, then clears the repository and imports the requested backup. If import fails, it attempts to clear the repository again and restore that snapshot. Blank nodes and named graphs are supported.
+- This restore is not atomic: stop other writes and expect the repository to be temporarily empty or incomplete. The backup directory must be writable and have enough space for the existing data. If recovery also fails or the process is interrupted, the snapshot and its `metadata.json` remain in the recovery directory for manual recovery; check the logs and repository state before retrying. Store backups on persistent storage if the container may be replaced. A lost HTTP response can leave the operation outcome uncertain.
+- GraphDB data lives in repositories. The scheduler backs up every repository returned by `GET /rest/repositories`.
+- Set `DB_PORT=7200` for the usual GraphDB port. Provide `DB_USER`/`DB_PASSWORD` only if security is enabled in your GraphDB instance.
 
 ### CRON_CONFIGS
 
@@ -64,12 +93,13 @@ services:
     build: .
     environment:
       DB_HOST: 'database'
-      DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306
+      DB_PORT: '5432' # postgres/postgis: 5432; mysql: 3306; graphdb: 7200; mongodb: 27017; redis: 6379
       DB_USER: 'user'
       DB_PASSWORD: 'password'
-      DB_MAINTENANCE_NAME: 'mydatabase' # defaults to DB_USER
-      DB_TYPE: 'postgres' # postgres/postgis/mysql
+      DB_MAINTENANCE_NAME: 'mydatabase' # For SQL databases; for Redis, typically not used or set to 0 for the default DB., for MongoDB often 'admin'
+      DB_TYPE: 'postgres' # postgres/postgis/mysql/mongodb/redis/graphdb
       BACKUP_DIR: /backups
+      # BACKUP_FILE_EXTENSION: '.backup.gz' # Default: .backup (uncompressed)
       CRON_CONFIGS: '[{"cron": "0 * * * *", "retention_max": 15, "name": "every"},{"cron": "0 * * * *", "retention_max": 1, "name": "hourly"}]'
       # RESTORE_CONFIG_NAME: 'hourly' # When you have to restore some content
     volumes:
@@ -91,6 +121,21 @@ Restore the database from a given configuration name or backup file path:
 If a valid name_or_path is provided it restores this file to the database as configured with environment variables, else it tries to restore the latest backup from the backup configuration name provided with `RESTORE_CONFIG_NAME`. 
 
 If a configuration name is provided, the application will log the chosen backup file for restore.
+
+Automatic restore and retention only consider regular scheduler-generated files
+named `<database>.<14-digit timestamp><configured extension>`. Recovery
+directories are excluded. Restore a backup with a nonstandard name by passing
+its path explicitly.
+
+The command exits with status code `0` when the restore succeeds and with status code `1` when the restore fails or when no backup is found for the requested configuration name, so it can be safely used in scripts.
+
+Backups compressed with `.gz` are decompressed in a private system temporary directory before restore. The directory is removed when the restore completes or raises an exception. The temporary filesystem must have enough free space for the uncompressed backup. An abrupt process termination can leave a `nards-db-restore-` directory behind; remove abandoned directories after verifying that no restore is using them.
+
+### PostGIS Extensions (pgvector, etc.)
+
+- When backing up a PostGIS database, the app inspects installed extensions (excluding `plpgsql`) and writes a companion `<backup>.pre.sql` with `CREATE EXTENSION IF NOT EXISTS ...` statements (always including `postgis`, plus any others like `vector`).
+- During restore, the app executes `<backup>.pre.sql` before `pg_restore` so that types/functions from extensions are available.
+- Ensure the target server has required extension packages installed beforehand (for example on Debian-based Postgres 14: `postgresql-14-pgvector` for pgvector), otherwise `CREATE EXTENSION` will fail.
 
 ## Roadmap
 
@@ -124,8 +169,8 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 ### Requirements
 
 - Docker (optional, for containerized deployment)
-- Python 3.9
-- MySQL or PostGIS database
+- Python 3.9 (or compatible, e.g., 3.10 as per Dockerfile)
+- MySQL, PostgreSQL, PostGIS, Redis, MongoDB, or GraphDB database
 
 ### Build using Docker
 
@@ -135,7 +180,7 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 
 2. Run the Docker container:
 
-   `docker run -p 5000:5000 --env-file .env flask_backup_app`
+  `docker run -p 5000:5000 --env-file .env flask_backup_app`
 
 ### Build without Docker
 
@@ -146,6 +191,49 @@ You can also mail me: [giuseppe\@nards.it](mailto:giuseppe@nards.it?subject=[nar
 2. Run the application:
 
    `python app.py`
+
+## Testing
+
+You can run the test suite in two ways, either mirroring the CI pipeline with Docker Compose, or directly from your local virtual environment using pytest (with Docker-managed services).
+
+### CI-like (Docker Compose)
+
+- Run tests in containers (same as GitHub Actions):
+
+  `docker compose -f docker-compose.quickstart.yml down -v && docker compose -f docker-compose.quickstart.yml up --build --exit-code-from test-runner`
+
+- Tear down (optional if you used `--exit-code-from`, containers stop automatically):
+
+  `docker compose -f docker-compose.quickstart.yml down -v`
+
+- Redis note: in the test compose, the `redis` service runs in a tiny restart loop so that the test's `SHUTDOWN` does not terminate the container and abort the Compose run. This applies only to the test compose.
+  
+- MongoDB note: the service is named `mongodb` in `docker-compose.quickstart.yml`. The `test-runner` exports `DB_HOST_MONGODB=mongodb`, `DB_PORT_MONGODB=27017`, `DB_USER_MONGODB=testuser`, `DB_PASSWORD_MONGODB=testpassword`, `DB_NAME_MONGODB=admin` for the tests.
+
+- GraphDB note: the test stack includes a `graphdb` service (GraphDB Free). The GraphDB module exports and restores explicit RDF data as N-Quads. Set `DB_PORT` to `7200` for the test service.
+
+### Local venv + pytest
+
+- Requirements:
+  - Docker installed and running
+  - Database CLI tools available on your host PATH:
+    - MySQL: `mysqldump` (from `mariadb-client` or `mysql-client`)
+    - PostgreSQL: `pg_dump`, `pg_restore`, `psql` (from `postgresql-client`)
+  - Python dependencies installed: `pip install -r requirements.txt`
+
+- Run tests from your venv; the test stack is auto-started by pytest (pytest-docker):
+
+  `source venv/bin/activate && pytest -q`
+
+- Notes:
+  - `tests/conftest.py` automatically brings up services from `tests/docker-compose.yml` and exports the needed env vars; no manual setup needed.
+  - Includes MongoDB via the `mongodb` service; credentials: `testuser` / `testpassword` with `authSource=admin`.
+  - If you have an existing container named `mysql` running, you may see a name conflict. Stop it or run:
+
+    `docker compose -f tests/docker-compose.yml down -v`
+
+  - Redis note (local venv): if reading/writing `tests/redis-data/dump.rdb` hits a PermissionError on your host, the RedisModule automatically falls back to copying via `docker cp` by detecting the Redis container. This requires the `docker` CLI to be available locally.
+
 
 ## License
 

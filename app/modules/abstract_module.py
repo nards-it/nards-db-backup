@@ -1,6 +1,23 @@
+import gzip
+import logging
+import shutil
+import tempfile
+import zlib
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterator
 from pathlib import Path
-from typing import List
+
+# Configura il logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
+
+class UnsupportedMethod(Exception):
+    """Exception raised for custom error scenarios."""
+
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 
 class AbstractModule(metaclass=ABCMeta):
@@ -9,7 +26,15 @@ class AbstractModule(metaclass=ABCMeta):
     backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
+    def __init__(
+        self,
+        host: str,
+        port: str,
+        username: str,
+        password: str,
+        maintenance_db: str,
+        file_extension: str = ".backup",
+    ):
         """
         Initializes the database module with connection details.
 
@@ -19,12 +44,16 @@ class AbstractModule(metaclass=ABCMeta):
             username (str): The username to connect to the database.
             password (str): The password to connect to the database.
             maintenance_db (str): The name of the database used for maintenance.
+            file_extension (str): Extension used for generated backup files.
         """
         self._host = host
         self._port = port
         self._username = username
         self._password = password
         self._maintenance_db = maintenance_db
+        if not file_extension.startswith(".") or file_extension == ".":
+            raise ValueError("Backup file extension must start with a dot.")
+        self._file_extension = file_extension
 
     @property
     def host(self) -> str:
@@ -74,36 +103,83 @@ class AbstractModule(metaclass=ABCMeta):
         Returns:
             str: The name of the database used for maintenance.
         """
-        return self._password
+        return self._maintenance_db
+
+    @property
+    def file_extension(self) -> str:
+        """
+        Returns the default extension of the created file.
+
+        Returns:
+            str: The name of the default extension of the created file.
+        """
+        return self._file_extension
 
     @abstractmethod
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all databases in the database server.
 
         Returns:
-            List[str]: A list of database names.
+            list[str]: A list of database names.
         """
-        raise Exception("Unsupported method")
+        raise UnsupportedMethod("list_all_databases")
 
-    @abstractmethod
     def backup_database(self, name: str, destination_file: Path) -> bool:
-        """
-        Backs up the specified database to a file.
+        """Create a backup, applying gzip when its destination ends in ``.gz``."""
+        destination_path = Path(destination_file)
+        uncompressed_path = (
+            destination_path.with_suffix("")
+            if destination_path.name.endswith(".gz")
+            else destination_path
+        )
+        success = self._backup_database(name, uncompressed_path)
+        if not success or not destination_path.name.endswith(".gz"):
+            return success
 
-        Args:
-            name (str): The name of the database to back up.
-            destination_file (Path): The path to the file where the backup will be stored.
-
-        Returns:
-            bool: True if the backup was successful, False otherwise.
-        """
-        raise Exception("Unsupported method")
+        try:
+            self.compress_backup(uncompressed_path)
+            return True
+        except OSError as exc:
+            logger.error(f"Error compressing backup '{uncompressed_path}': {exc}")
+            return False
 
     @abstractmethod
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
+        """Implement the database-specific uncompressed backup operation."""
+        raise UnsupportedMethod("_backup_database")
+
     def restore_database(self, name: str, source_file: Path) -> bool:
-        """
-        Restores the specified database from a backup file.
+        """Restore a backup, transparently expanding gzip files when required."""
+        source_path = Path(source_file)
+        if not source_path.name.endswith(".gz"):
+            return self._restore_database(name, source_path)
+
+        try:
+            temp_dir = tempfile.TemporaryDirectory(prefix="nards-db-restore-")
+        except OSError as exc:
+            logger.error(f"Unable to prepare backup '{source_file}' for restore: {exc}")
+            return False
+
+        with temp_dir:
+            try:
+                expanded = self.decompress_backup(source_path, Path(temp_dir.name))
+            except (OSError, ValueError, EOFError, zlib.error) as exc:
+                logger.error(
+                    f"Unable to prepare backup '{source_file}' for restore: {exc}"
+                )
+                return False
+            return self._restore_prepared_database(name, expanded, source_path)
+
+    def _restore_prepared_database(
+        self, name: str, source_file: Path, archive_file: Path
+    ) -> bool:
+        """Restore an expanded archive, retaining its original path for modules."""
+        return self._restore_database(name, source_file)
+
+    @abstractmethod
+    def _restore_database(self, name: str, source_file: Path) -> bool:
+        """Implement the database-specific uncompressed restore operation.
 
         Args:
             name (str): The name of the database to restore.
@@ -112,4 +188,109 @@ class AbstractModule(metaclass=ABCMeta):
         Returns:
             bool: True if the restore was successful, False otherwise.
         """
-        raise Exception("Unsupported method")
+        raise UnsupportedMethod("_restore_database")
+
+    def backup_file_name(self, database_name: str, timestamp: str) -> str:
+        """Return the standard name for a backup produced at ``timestamp``."""
+        return f"{database_name}.{timestamp}{self.file_extension}"
+
+    def backup_file_glob(self, database_name: str | None = None) -> str:
+        """Return the glob used to find this module's backup files."""
+        database_pattern = f"{database_name}.*" if database_name else "*"
+        return f"**/{database_pattern}{self.file_extension}"
+
+    def iter_backup_files(
+        self, directory: Path, database_name: str | None = None
+    ) -> Iterator[Path]:
+        """Find scheduler-generated backups without selecting auxiliary files.
+
+        Names must contain a non-empty database name and a 14-digit timestamp
+        before the configured literal extension. Recovery directories are
+        excluded, and a requested database name must match exactly.
+
+        Args:
+            directory: Root directory to search recursively.
+            database_name: Restrict results to this exact database name.
+
+        Yields:
+            Regular backup paths matching the scheduler's naming convention.
+        """
+        root = Path(directory)
+        for path in root.rglob("*"):
+            relative = path.relative_to(root)
+            if any(
+                part.startswith(".graphdb-recovery-") for part in relative.parts[:-1]
+            ):
+                continue
+            if path.is_symlink() or not path.is_file():
+                continue
+            filename = path.name
+            if not filename.endswith(self.file_extension):
+                continue
+            stem = filename[: -len(self.file_extension)]
+            db_name, separator, timestamp = stem.rpartition(".")
+            if (
+                not separator
+                or not db_name
+                or len(timestamp) != 14
+                or not timestamp.isascii()
+                or not timestamp.isdigit()
+            ):
+                continue
+            if database_name is None or db_name == database_name:
+                yield path
+
+    def database_name_from_backup(self, backup_file: Path | str) -> str:
+        """Extract the database name from a scheduler-generated backup file."""
+        filename = Path(backup_file).name
+        extension = self.file_extension
+        if filename != extension and filename.endswith(extension):
+            # The configured extension may itself contain dots (e.g. ".sql.bak"),
+            # so it is stripped as a whole before the timestamp is removed.
+            return filename.removesuffix(extension).rsplit(".", 1)[0]
+        # Fallback for files generated with a different extension: drop an
+        # optional ".gz" and the timestamp, assuming a single-segment extension.
+        return filename.removesuffix(".gz").rsplit(".", 2)[0]
+
+    def compress_backup(self, backup_file: Path | str) -> Path:
+        """Compress a backup and remove its uncompressed source file.
+
+        Args:
+            backup_file: Path of the uncompressed backup.
+
+        Returns:
+            The path of the generated ``.gz`` file.
+        """
+        backup_path = Path(backup_file)
+        gz_file = Path(f"{backup_path}.gz")
+        logger.info(f"Compressing backup file {backup_file} to {gz_file}")
+        with backup_path.open("rb") as f_in, gzip.open(gz_file, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        backup_path.unlink()
+        logger.info("Successfully compressed and removed the uncompressed backup file.")
+        return gz_file
+
+    def decompress_backup(self, gz_file: Path | str, destination_dir: Path) -> Path:
+        """Decompress a ``.gz`` backup and return the restored file path.
+
+        The archive is retained. The caller owns the destination directory and
+        its cleanup. Existing files are never overwritten.
+
+        Raises:
+            ValueError: If the file does not have a ``.gz`` extension.
+            OSError: If the archive cannot be read or written.
+        """
+        gz_path = Path(gz_file)
+        if gz_path.suffix != ".gz":
+            raise ValueError(f"Compressed backup must have a .gz extension: {gz_path}")
+
+        backup_file = Path(destination_dir) / gz_path.with_suffix("").name
+        logger.info(f"Decompressing backup file {gz_file} to {backup_file}")
+        with backup_file.open("xb") as f_out:
+            try:
+                with gzip.open(gz_path, "rb") as f_in:
+                    shutil.copyfileobj(f_in, f_out)
+            except BaseException:
+                backup_file.unlink(missing_ok=True)
+                raise
+        return backup_file

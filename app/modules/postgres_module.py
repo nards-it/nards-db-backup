@@ -1,24 +1,34 @@
+import logging
+import os
+import subprocess
+from pathlib import Path
+
 import psycopg2
 from psycopg2 import Error
-from pathlib import Path
-from typing import List
-import subprocess
-import logging
 
 from app.modules.abstract_module import AbstractModule
+from app.modules.postgresql_client import PostgreSQLClientMixin
 
 # Configura il logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-class PostgresModule(AbstractModule):
+class PostgresModule(PostgreSQLClientMixin, AbstractModule):
     """
     Concrete implementation of AbstractModule for PostgreSQL databases,
     providing methods for listing, backing up, and restoring databases.
     """
 
-    def __init__(self, host: str, port: str, username: str, password: str, maintenance_db: str):
+    def __init__(
+        self,
+        host: str,
+        port: str,
+        username: str,
+        password: str,
+        maintenance_db: str,
+        file_extension: str = ".backup",
+    ):
         """
         Initializes the PostgresModule with connection details.
 
@@ -28,7 +38,7 @@ class PostgresModule(AbstractModule):
             username (str): The username to connect to the PostgreSQL server.
             password (str): The password to connect to the PostgreSQL server.
         """
-        super().__init__(host, port, username, password, maintenance_db)
+        super().__init__(host, port, username, password, maintenance_db, file_extension)
 
     def _connect(self):
         """
@@ -43,7 +53,7 @@ class PostgresModule(AbstractModule):
                 port=self._port,
                 user=self._username,
                 password=self._password,
-                dbname=self._maintenance_db
+                dbname=self._maintenance_db,
             )
             logger.info("Successfully connected to PostgreSQL database.")
             return connection
@@ -51,18 +61,20 @@ class PostgresModule(AbstractModule):
             logger.error(f"Error connecting to PostgreSQL database: {e}")
             return None
 
-    def list_all_databases(self) -> List[str]:
+    def list_all_databases(self) -> list[str]:
         """
         Lists all databases in the PostgreSQL server.
 
         Returns:
-            List[str]: A list of database names.
+            list[str]: A list of database names.
         """
         connection = self._connect()
         if connection:
             try:
                 cursor = connection.cursor()
-                cursor.execute("SELECT datname FROM pg_database WHERE datistemplate = false;")
+                cursor.execute(
+                    "SELECT datname FROM pg_database WHERE datistemplate = false;"
+                )
                 databases = cursor.fetchall()
                 cursor.close()
                 return [db[0] for db in databases]
@@ -76,7 +88,7 @@ class PostgresModule(AbstractModule):
             logger.error("Unknown error connecting to database.")
             return []
 
-    def backup_database(self, name: str, destination_file: Path) -> bool:
+    def _backup_database(self, name: str, destination_file: Path) -> bool:
         """
         Backs up the specified database to a file.
 
@@ -87,8 +99,19 @@ class PostgresModule(AbstractModule):
         Returns:
             bool: True if the backup was successful, False otherwise.
         """
-        command = (f"pg_dump --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
-                   f" {destination_file}")
+        try:
+            pg_dump = self._postgres_client("pg_dump")
+        except RuntimeError as exc:
+            logger.error("Cannot select PostgreSQL client for backup: %s", exc)
+            return False
+
+        clean_param = ""
+        if os.environ.get("PG_RESTORE_CLEAN") == "true":
+            clean_param = "--no-owner --no-privileges"
+        command = (
+            f"{pg_dump} {clean_param} --inserts --column-inserts -h {self._host} -p {self._port} -U {self._username} -d {name} -F c -b -v -f"
+            f" {destination_file}"
+        )
         try:
             # Set the PGPASSWORD environment variable to avoid password prompt
             env = {"PGPASSWORD": self._password}
@@ -99,7 +122,7 @@ class PostgresModule(AbstractModule):
             logger.error(f"Error backing up database {name}: {e}")
             return False
 
-    def restore_database(self, name: str, source_file: Path) -> bool:
+    def _restore_database(self, name: str, source_file: Path) -> bool:
         """
         Restores the specified PostgreSQL database from a backup file.
 
@@ -111,38 +134,74 @@ class PostgresModule(AbstractModule):
             bool: True if the restore was successful, False otherwise.
         """
 
-        # Set environment variable for password
-        env = {
-            "PGPASSWORD": self._password
-        }
+        try:
+            psql = self._postgres_client("psql")
+            pg_restore = self._postgres_client("pg_restore")
+        except RuntimeError as exc:
+            logger.error("Cannot select PostgreSQL client for restore: %s", exc)
+            return False
 
-        drop_command = (f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
-                        f"-c 'DROP DATABASE IF EXISTS {name};'")
-        create_command = (f"psql -h {self._host} -p {self._port} -U {self._username} -d postgres "
-                          f"-c 'CREATE DATABASE {name};'")
-        restore_command = f"pg_restore -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
+        # Set environment variable for password
+        env = {"PGPASSWORD": self._password}
+
+        drop_command = (
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"-c 'DROP DATABASE IF EXISTS {name};'"
+        )
+        create_command = (
+            f"{psql} -h {self._host} -p {self._port} -U {self._username} -d postgres "
+            f"-c 'CREATE DATABASE {name};'"
+        )
+        clean_param = ""
+        if os.environ.get("PG_RESTORE_CLEAN") == "true":
+            clean_param = "--clean --if-exists"
+        restore_command = f"{pg_restore} {clean_param} -h {self._host} -p {self._port} -U {self._username} -d {name} {source_file}"
 
         try:
             # Drop the database
-            subprocess.run(drop_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
+            subprocess.run(
+                drop_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
             logger.info(f"Database {name} dropped successfully.")
 
             # Create the database
-            subprocess.run(create_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
+            subprocess.run(
+                create_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
             logger.info(f"Database {name} created successfully.")
 
             # Restore the database from the backup file
-            subprocess.run(restore_command, shell=True, check=True, text=True, encoding='utf-8', env=env)
+            subprocess.run(
+                restore_command,
+                shell=True,
+                check=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
             logger.info(f"Restore successful for database {name} from {source_file}.")
             return True
         except subprocess.CalledProcessError as e:
             logger.error(
                 f"Error restoring database {name}: {e}. "
-                f"Command: {drop_command if e.cmd == drop_command else restore_command}")
+                f"Command: {drop_command if e.cmd == drop_command else restore_command}"
+            )
             return False
         except FileNotFoundError:
             logger.error(f"Backup file {source_file} not found.")
             return False
-        except Exception as e:
-            logger.error(f"Unexpected error occurred while restoring database {name}: {e}")
+        except Exception as e:  # Catch other unexpected errors  # noqa: BLE001
+            logger.error(
+                f"Unexpected error occurred while restoring database {name}: {e}"
+            )
             return False
